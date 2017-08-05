@@ -15,6 +15,7 @@
 	EQU rlink, 14
 
 	EQU expression_stack_top, 0x0200
+	EQU plasma_data, 0x8000
 	EQU stack_top, 0xf000
 
 	ORG 0x0000
@@ -72,7 +73,12 @@ cw:
 	pop pc, rsp
 
 saw:
-	halt r0, r0, 0x400
+	push rlink, rsp
+	jsr rlink, r0, get_word_operand
+	pop r11, restk
+	; TODO: Macro instead of subroutine?
+	jsr rlink, r0, store_plasma_word
+	pop pc, rsp
 
 	; ripw/ripb point at an opcode with a two-byte operand.
 	; Advance ripw/ripb by 3 bytes and return with r10 containing the two-byte operand
@@ -97,6 +103,37 @@ get_word_operand_split:
 	or r10, r11
 	bswp r10, r10
 	mov ripb, r0, 1
+	mov pc, rlink
+
+	; Store word in r11 at offset r10 in plasma_data
+store_plasma_word:
+	lsr r12, r10
+	c.mov pc, r0, store_plasma_word_split
+	; TODO: We could make the next two instructions conditional on carry clear
+	; and avoid the branch; not sure if that would be a performance gain or not.
+	; r10 is even, so we can simply write to OPC word plasma_data[r12]
+	sto r11, r12, plasma_data
+	mov pc, rlink
+store_plasma_word_split:
+	; r10 is odd, so we need to split the write across two OPC words.
+	; Write the low byte of r11 to the high byte of OPC word plasma_data[r12]
+	ld r9, r12, plasma_data
+	bswp r9, r9
+	and r9, r0, 0xff00
+	mov r8, r11
+	and r8, r0, 0x00ff
+	or r9, r8
+	bswp r9, r9
+	sto r9, r12, plasma_data
+	; Write the high byte of r11 to the low byte of OPC word plasma_data[r12+1]
+	add r12, r0, 1
+	ld r9, r12, plasma_data
+	bswp r9, r9
+	and r9, r0, 0x00ff
+	and r11, r0, 0xff00
+	or r9, r11
+	bswp r9, r9
+	sto r9, r12, plasma_data
 	mov pc, rlink
 
 zero:
