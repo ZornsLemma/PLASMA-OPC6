@@ -31,8 +31,7 @@ vminit:
 interp:
 	push rlink, rsp
 	mov ripb, r0, 0			# First opcode in a function is always byte 0
-	; TODO: THAT'S A ONE-OFF - FOLLOWING IS "RESUME HERE FOR NEXT OPCODE" CODE TOO
-
+interp_loop:
 	; Get the next opcode byte into r10
 	ld r10, ripw
 	mov ripb, ripb
@@ -44,12 +43,14 @@ interp_even:
 	; opcode byte right one bit to get a valid index into our word-addressed
 	; opcode table.
 	lsr r10, r10
-	ld r10, r10, opcode_table	# Get address of opcode handler
-	halt r0, r0, 0x42
-	jsr rlink, r10, opcode_table
-
-	pop rlink, rsp
-	mov pc, rlink
+	ld r10, r10, opcode_table
+	; Transfer control to the handler. 
+	; TODO: We could probably just do this with mov pc, r10 and have the handler
+	; jump back to the relevant point in the interpreter - but let's do it like
+	; this for now until things take shape.
+	jsr rlink, r10
+	; The handler will have updated ripw/ripb, so interpret the next opcode.
+	mov pc, r0, interp_loop
 
 opcode_table:
 	WORD	zero,add,sub,mul,div,mod,incr,decr 		# 00 02 04 06 08 0A 0C 0E
