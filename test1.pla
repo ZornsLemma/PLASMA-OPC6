@@ -1,0 +1,3 @@
+const addr = $4000
+*addr = $1234
+done
