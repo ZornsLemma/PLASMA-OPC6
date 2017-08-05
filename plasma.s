@@ -49,6 +49,7 @@ interp_even:
 	; jump back to the relevant point in the interpreter - but let's do it like
 	; this for now until things take shape.
 	jsr rlink, r10
+	halt r0, r0, 0x300
 	; The handler will have updated ripw/ripb, so interpret the next opcode.
 	mov pc, r0, interp_loop
 
@@ -63,7 +64,35 @@ opcode_table:
 	WORD	sb,sw,slb,slw,sab,saw,dab,daw			# 70 72 74 76 78 7A 7C 7E
 
 cw:
-	halt r0, r0, 0x99
+	push rlink, rsp
+	; TODO: Might be better to use a macro to handle operand decoding but let's
+	; favour simplicity over performance for now.
+	jsr rlink, r0, get_word_operand
+	push r10, restk
+	pop pc, rsp
+
+	; Advance ripw/ripb by 3 bytes and return with r10 containing the two-byte operand
+get_word_operand:
+	mov ripb, ripb
+	z.mov pc, r0, get_word_operand_split
+	; ripb != 0, so the word operand is the OPC word at ripw+1
+	add ripw, r0, 1
+	ld r10, ripw
+	add ripw, r0, 1
+	mov ripb, r0, 0
+	mov pc, rlink
+get_word_operand_split:
+	; ripb == 0, so the word operand low byte is the high byte of OPC word at ripw...
+	ld r10, ripw
+	and r10, r0, 0xff00
+	; ... and the word operand high byte is the low byte of the OPC word at ripw+1
+	add ripw, r0, 1
+	ld r11, ripw
+	and r11, r0, 0x00ff
+	or r10, r11
+	bswp r10, r10
+	mov ripb, r0, 1
+	mov pc, rlink
 
 zero:
 add:
