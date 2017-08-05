@@ -93,6 +93,7 @@ get_word_operand_split:
 	add ripw, r0, 1
 	ld r11, ripw
 	and r11, r0, 0x00ff
+	; Combine the two bytes into r10.
 	or r10, r11
 	bswp r10, r10
 	mov ripb, r0, 1
