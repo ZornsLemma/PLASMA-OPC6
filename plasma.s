@@ -74,11 +74,12 @@ cw:
 saw:
 	halt r0, r0, 0x400
 
+	; ripw/ripb point at an opcode with a two-byte operand.
 	; Advance ripw/ripb by 3 bytes and return with r10 containing the two-byte operand
 get_word_operand:
 	mov ripb, ripb
 	z.mov pc, r0, get_word_operand_split
-	; ripb != 0, so the word operand is the OPC word at ripw+1
+	; ripb == 1, so the word operand is the OPC word at ripw+1
 	add ripw, r0, 1
 	ld r10, ripw
 	add ripw, r0, 1
