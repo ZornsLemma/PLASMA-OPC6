@@ -64,6 +64,13 @@ opcode_table:
 	WORD	lb,lw,llb,llw,lab,law,dlb,dlw			# 60 62 64 66 68 6A 6C 6E
 	WORD	sb,sw,slb,slw,sab,saw,dab,daw			# 70 72 74 76 78 7A 7C 7E
 
+zero:
+	push rlink, rsp
+	push r0, restk
+	; TODO: Probably better to use macro than subroutine
+	jsr rlink, r0, inc_ip
+	pop pc, rsp
+
 cw:
 	push rlink, rsp
 	; TODO: Might be better to use a macro to handle operand decoding but let's
@@ -79,6 +86,18 @@ saw:
 	; TODO: Macro instead of subroutine?
 	jsr rlink, r0, store_plasma_word
 	pop pc, rsp
+
+ret:
+	pop pc, rsp
+
+	; Advance ripw/ripb by one byte.
+inc_ip:
+	add ripb, r0, 1
+	cmp ripb, r0, 2
+	nz.mov pc, rlink
+	mov ripb, r0, 0
+	add ripw, r0, 1
+	mov pc, rlink
 
 	; ripw/ripb point at an opcode with a two-byte operand.
 	; Advance ripw/ripb by 3 bytes and return with r10 containing the two-byte operand
@@ -136,7 +155,6 @@ store_plasma_word_split:
 	sto r9, r12, plasma_data
 	mov pc, rlink
 
-zero:
 add:
 sub:
 mul:
@@ -181,7 +199,6 @@ call:
 ical:
 enter:
 leave:
-ret:
 cffb:
 lb:
 lw:
