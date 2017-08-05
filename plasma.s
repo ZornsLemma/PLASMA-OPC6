@@ -49,7 +49,7 @@ interp_even:
 	; jump back to the relevant point in the interpreter - but let's do it like
 	; this for now until things take shape.
 	jsr rlink, r10
-	halt r0, r0, 0x300
+	;halt r0, r0, 0x300
 	; The handler will have updated ripw/ripb, so interpret the next opcode.
 	mov pc, r0, interp_loop
 
@@ -70,6 +70,9 @@ cw:
 	jsr rlink, r0, get_word_operand
 	push r10, restk
 	pop pc, rsp
+
+saw:
+	halt r0, r0, 0x400
 
 	; Advance ripw/ripb by 3 bytes and return with r10 containing the two-byte operand
 get_word_operand:
@@ -154,7 +157,6 @@ sw:
 slb:
 slw:
 sab:
-saw:
 dab:
 daw:
 	halt r0, r0, 0xffff
