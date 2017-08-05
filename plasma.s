@@ -28,12 +28,14 @@ vminit:
 
 interp:
 	push rlink, rsp
-	ld r10, rip
-	and r10, r0, 0xff
-	mov r10, r10, opcode_table
+	ld r10, rip			# Get next opcode byte and following byte
+	; TODO: It may be useful to preserve the r10 value, as that way we have the operand
+	; for two-byte opcodes already fetched.
+	and r10, r0, 0xff		# Get next opcode byte
+	ld r10, r10, opcode_table	# Get address of opcode handler
 	
-	jsr rlink, r10, opcode_table
 	halt r0, r0, 0x42
+	jsr rlink, r10, opcode_table
 	ld r10, rip
 
 	pop rlink, rsp
