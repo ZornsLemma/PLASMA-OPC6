@@ -224,8 +224,12 @@ a1cmd:
 	; TODO: Some sort of byte-oriented equivalent of assembler directive WORD
 	; !BYTE	$2C,$34,$12		; CW	4660
 	; !BYTE	$7A,$00,$40		; SAW	16384
+	; !BYTE	$2C,$89,$67		; CW	$6789
+	; !BYTE	$7A,$03,$40		; SAW	16387
 	; !BYTE	$00			; ZERO
 	; !BYTE	$5C			; RET
-	WORD 0x342c, 0x7a12, 0x4000, 0x5c00 
+	WORD 0x342c, 0x7a12, 0x4000
+	WORD 0x892c, 0x7a67, 0x4003
+	WORD 0x5c00 
 
 heap_start:
