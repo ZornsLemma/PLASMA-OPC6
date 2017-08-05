@@ -1,5 +1,5 @@
 ; Register use:
-; R1 = expression stack pointer (full descending)
+; R1 = expression stack pointer
 ; R2 = heap pointer
 ; R3 = frame pointer
 ; R4 = bytecode instruction pointer (word)
