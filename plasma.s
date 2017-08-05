@@ -2,13 +2,15 @@
 ; R1 = expression stack pointer (full descending)
 ; R2 = heap pointer
 ; R3 = frame pointer
-; R4 = bytecode instruction pointer
+; R4 = bytecode instruction pointer (word)
+; R5 = bytecode instruction pointer (byte within word)
 ; R13 = stack pointer
 ; R14 = link register
 	EQU restk,  1
 	EQU rheap,  2
 	EQU rifp,   3
-	EQU rip,    4
+	EQU ripw,   4
+	EQU ripb,   5
 	EQU rsp,   13
 	EQU rlink, 14
 
@@ -28,15 +30,23 @@ vminit:
 
 interp:
 	push rlink, rsp
-	ld r10, rip			# Get next opcode byte and following byte
-	; TODO: It may be useful to preserve the r10 value, as that way we have the operand
-	; for two-byte opcodes already fetched.
-	and r10, r0, 0xff		# Get next opcode byte
+	mov ripb, r0, 0			# First opcode in a function is always byte 0
+	; TODO: THAT'S A ONE-OFF - FOLLOWING IS "RESUME HERE FOR NEXT OPCODE" CODE TOO
+
+	; Get the next opcode byte into r10
+	ld r10, ripw
+	mov ripb, ripb
+	z.mov pc, r0, interp_even
+	bswp r10, r10
+interp_even:
+	and r10, r0, 0xff
+	; Get the address of the corresponding opcode handler. We need to shift the
+	; opcode byte right one bit to get a valid index into our word-addressed
+	; opcode table.
+	lsr r10, r10
 	ld r10, r10, opcode_table	# Get address of opcode handler
-	
 	halt r0, r0, 0x42
 	jsr rlink, r10, opcode_table
-	ld r10, rip
 
 	pop rlink, rsp
 	mov pc, rlink
@@ -122,7 +132,7 @@ daw:
 
 ; Start executing compiled PLASMA code here
 a1cmd:
-	jsr rip, r0, interp
+	jsr ripw, r0, interp
 	; TODO: Some sort of byte-oriented equivalent of assembler directive WORD
 	; !BYTE	$2C,$34,$12		; CW	4660
 	; !BYTE	$7A,$00,$40		; SAW	16384
