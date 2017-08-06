@@ -48,7 +48,8 @@ interp_even:
 	; Transfer control to the handler. 
 	; TODO: We could probably just do this with mov pc, r10 and have the handler
 	; jump back to the relevant point in the interpreter - but let's do it like
-	; this for now until things take shape.
+	; this for now until things take shape. (This would avoid the need for the
+	; handlers to have to stack rlink.)
 	jsr rlink, r10
 	;halt r0, r0, 0x300
 	; The handler will have updated ripw/ripb, so interpret the next opcode.
@@ -71,6 +72,15 @@ zero:
 	jsr rlink, r0, inc_ip
 	pop pc, rsp
 
+add:
+	push rlink, rsp
+	pop r10, restk
+	pop r11, restk
+	add r10, r11
+	push r10, restk
+	jsr rlink, r0, inc_ip
+	pop pc, rsp
+
 cw:
 	push rlink, rsp
 	; TODO: Might be better to use a macro to handle operand decoding but let's
@@ -87,6 +97,14 @@ saw:
 	jsr rlink, r0, store_plasma_word
 	pop pc, rsp
 
+law:
+	push rlink, rsp
+	jsr rlink, r0, get_word_operand
+	; TODO: Macro instead of subroutine?
+	jsr rlink, r0, load_plasma_word
+	push r11, restk
+	pop pc, rsp
+
 ret:
 	pop pc, rsp
 
@@ -98,6 +116,9 @@ inc_ip:
 	mov ripb, r0, 0
 	add ripw, r0, 1
 	mov pc, rlink
+
+	; TODO: A lot of these subroutines are very free with their register use; this
+	; is done to aid debugging, later on it may be useful to compress them.
 
 	; ripw/ripb point at an opcode with a two-byte operand.
 	; Advance ripw/ripb by 3 bytes and return with r10 containing the two-byte operand
@@ -155,7 +176,25 @@ store_plasma_word_split:
 	sto r9, r12, plasma_data
 	mov pc, rlink
 
-add:
+	; Load word at offset r10 in plasma_data, returning it in r11
+load_plasma_word:
+	lsr r12, r10
+	c.mov pc, r0, load_plasma_word_split
+	; TODO: Make next two instructions conditional to avoid branch?
+	ld r11, r12, plasma_data
+	mov pc, rlink
+load_plasma_word_split:
+	; r10 is odd, so we need to split the read across two OPC words.
+	ld r9, r12, plasma_data
+	and r9, r0, 0xff00
+	; TODO: Not just here - can we merge next two into 'ld r11, r12, plasma_data+1'?
+	add r12, r0, 1
+	ld r11, r12, plasma_data
+	and r11, r0, 0x00ff
+	or r11, r9
+	bswp r11, r11
+	mov pc, rlink
+
 sub:
 mul:
 div:
@@ -205,7 +244,6 @@ lw:
 llb:
 llw:
 lab:
-law:
 dlb:
 dlw:
 sb:
@@ -221,13 +259,19 @@ daw:
 ; Start executing compiled PLASMA code here
 a1cmd:
 	jsr ripw, r0, interp
-	; TODO: Some sort of byte-oriented equivalent of assembler directive WORD
 	; !BYTE	$2C,$34,$12		; CW	4660
 	; !BYTE	$7A,$00,$40		; SAW	16384
-	; !BYTE	$2C,$89,$67		; CW	$6789
+	; !BYTE	$2C,$89,$67		; CW	26505
 	; !BYTE	$7A,$03,$40		; SAW	16387
+	; !BYTE	$6A,$00,$40		; LAW	16384
+	; !BYTE	$6A,$03,$40		; LAW	16387
+	; !BYTE	$02			; ADD
+	; !BYTE	$7A,$00,$40		; SAW	16384
 	; !BYTE	$00			; ZERO
 	; !BYTE	$5C			; RET
-	BYTE 0x2c, 0x34, 0x12, 0x7a, 0x00, 0x40, 0x2c, 0x89, 0x67, 0x7a, 0x03, 0x40, 0x00, 0x5c
+	; TODO: For the moment, all but the last BYTE directive must have an even
+	; TODO: number of bytes in it to avoid padding.
+	BYTE 0x2c, 0x34, 0x12, 0x7a, 0x00, 0x40, 0x2c, 0x89, 0x67, 0x7a, 0x03, 0x40
+	BYTE 0x6a, 0x00, 0x40, 0x6a, 0x03, 0x40, 0x02, 0x7a, 0x00, 0x40, 0x00, 0x5c
 
 heap_start:

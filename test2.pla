@@ -1,0 +1,6 @@
+const addr1 = $4000
+const addr2 = $4003
+*addr1 = $1234
+*addr2 = $6789
+*addr1 = *addr1 + *addr2
+done
