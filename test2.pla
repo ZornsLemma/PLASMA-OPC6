@@ -1,6 +1,8 @@
 const addr1 = $4000
 const addr2 = $4003
+const addr3 = $4005
 *addr1 = $1234
 *addr2 = $6789
 *addr1 = *addr1 + *addr2
+^addr3 = ^addr1 + 10
 done

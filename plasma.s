@@ -81,6 +81,12 @@ add:
 	jsr rlink, r0, inc_ip
 	pop pc, rsp
 
+cb:
+	push rlink, rsp
+	jsr rlink, r0, get_byte_operand
+	push r10, restk
+	pop pc, rsp
+
 cw:
 	push rlink, rsp
 	; TODO: Might be better to use a macro to handle operand decoding but let's
@@ -89,12 +95,26 @@ cw:
 	push r10, restk
 	pop pc, rsp
 
+sab:
+	push rlink, rsp
+	jsr rlink, r0, get_word_operand
+	pop r11, restk
+	jsr rlink, r0, store_plasma_byte
+	pop pc, rsp
+
 saw:
 	push rlink, rsp
 	jsr rlink, r0, get_word_operand
 	pop r11, restk
 	; TODO: Macro instead of subroutine?
 	jsr rlink, r0, store_plasma_word
+	pop pc, rsp
+
+lab:
+	push rlink, rsp
+	jsr rlink, r0, get_word_operand
+	jsr rlink, r0, load_plasma_byte
+	push r11, restk
 	pop pc, rsp
 
 law:
@@ -120,8 +140,26 @@ inc_ip:
 	; TODO: A lot of these subroutines are very free with their register use; this
 	; is done to aid debugging, later on it may be useful to compress them.
 
+	; ripw/ripb point at an opcode with a one-byte operand.
+	; Advance ripw/ripb by 2 bytes and return with r10 containing the byte operand.
+get_byte_operand:
+	mov ripb, ripb
+	z.mov pc, r0, get_byte_operand_high
+	; ripb == 1, so the byte operand is the low byte of the OPC word at ripw+1
+	add ripw, r0, 1
+	ld r10, ripw
+	and r10, r0, 0x00ff
+	mov pc, rlink
+get_byte_operand_high:
+	; ripb == 0, so the byte operand is the high byte of the OPC word at ripw
+	ld r10, ripw
+	and r10, r0, 0xff00
+	bswp r10, r10
+	add ripw, r0, r1
+	mov pc, rlink
+
 	; ripw/ripb point at an opcode with a two-byte operand.
-	; Advance ripw/ripb by 3 bytes and return with r10 containing the two-byte operand
+	; Advance ripw/ripb by 3 bytes and return with r10 containing the two-byte operand.
 get_word_operand:
 	mov ripb, ripb
 	z.mov pc, r0, get_word_operand_split
@@ -143,6 +181,22 @@ get_word_operand_split:
 	or r10, r11
 	bswp r10, r10
 	mov ripb, r0, 1
+	mov pc, rlink
+
+	; Store byte in r11 at offset r10 in plasma_data
+store_plasma_byte:
+	lsr r12, r10
+	ld r9, r12, plasma_data
+	nc.mov pc, r0, store_plasma_byte_even
+	bswp r9, r9
+store_plasma_byte_even:
+	and r11, r0, 0x00ff
+	and r9, r0, 0xff00
+	or r9, r11
+	nc.mov pc, r0, store_plasma_byte_even2
+	bswp r9, r9
+store_plasma_byte_even2:
+	sto r9, r12, plasma_data
 	mov pc, rlink
 
 	; Store word in r11 at offset r10 in plasma_data
@@ -174,6 +228,19 @@ store_plasma_word_split:
 	or r9, r11
 	bswp r9, r9
 	sto r9, r12, plasma_data
+	mov pc, rlink
+
+	; Load byte at offset r10 in plasma_data, returning it in r11
+load_plasma_byte:
+	lsr r12, r10
+	c.mov pc, r0, load_plasma_byte_odd
+	ld r11, r12, plasma_data
+	and r11, r0, 0x00ff
+	mov pc, rlink
+load_plasma_byte_odd:
+	ld r11, r12, plasma_data+1
+	bswp r11, r11
+	and r11, r0, 0x00ff
 	mov pc, rlink
 
 	; Load word at offset r10 in plasma_data, returning it in r11
@@ -214,7 +281,6 @@ lor:
 land:
 la:
 lla:
-cb:
 cs:
 drop:
 dup:
@@ -243,14 +309,12 @@ lb:
 lw:
 llb:
 llw:
-lab:
 dlb:
 dlw:
 sb:
 sw:
 slb:
 slw:
-sab:
 dab:
 daw:
 	halt r0, r0, 0xffff
@@ -267,11 +331,16 @@ a1cmd:
 	; !BYTE	$6A,$03,$40		; LAW	16387
 	; !BYTE	$02			; ADD
 	; !BYTE	$7A,$00,$40		; SAW	16384
+	; !BYTE	$68,$00,$40		; LAB	16384
+	; !BYTE	$2A,$0A			; CB	10
+	; !BYTE	$02			; ADD
+	; !BYTE	$78,$05,$40		; SAB	16389
 	; !BYTE	$00			; ZERO
 	; !BYTE	$5C			; RET
 	; TODO: For the moment, all but the last BYTE directive must have an even
 	; TODO: number of bytes in it to avoid padding.
 	BYTE 0x2c, 0x34, 0x12, 0x7a, 0x00, 0x40, 0x2c, 0x89, 0x67, 0x7a, 0x03, 0x40
-	BYTE 0x6a, 0x00, 0x40, 0x6a, 0x03, 0x40, 0x02, 0x7a, 0x00, 0x40, 0x00, 0x5c
+	BYTE 0x6a, 0x00, 0x40, 0x6a, 0x03, 0x40, 0x02, 0x7a, 0x00, 0x40, 0x68, 0x00
+	BYTE 0x40, 0x2a, 0x0a, 0x02, 0x78, 0x05, 0x40, 0x00, 0x5c
 
 heap_start:
