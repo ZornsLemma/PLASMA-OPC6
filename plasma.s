@@ -125,6 +125,19 @@ law:
 	push r11, restk
 	pop pc, rsp
 
+	; TODO: Note that call's operand is an OPC word address, not a PLASMA data
+	; "address". I think this is fine, but will need to make sure this works OK
+	; once we suport ICAL and function pointers.
+call:
+	push rlink, rsp
+	jsr rlink, r0, get_word_operand
+	push ripw, rsp
+	push ripb, rsp
+	jsr rlink, r10
+	pop ripb, rsp
+	pop ripw, rsp
+	pop pc, rsp
+
 ret:
 	pop pc, rsp
 
@@ -300,7 +313,6 @@ brfls:
 brtru:
 brnch:
 ibrnch:
-call:
 ical:
 enter:
 leave:
@@ -323,24 +335,26 @@ daw:
 ; Start executing compiled PLASMA code here
 a1cmd:
 	jsr ripw, r0, interp
-	; !BYTE	$2C,$34,$12		; CW	4660
-	; !BYTE	$7A,$00,$40		; SAW	16384
-	; !BYTE	$2C,$89,$67		; CW	26505
-	; !BYTE	$7A,$03,$40		; SAW	16387
-	; !BYTE	$6A,$00,$40		; LAW	16384
-	; !BYTE	$6A,$03,$40		; LAW	16387
-	; !BYTE	$02			; ADD
-	; !BYTE	$7A,$00,$40		; SAW	16384
-	; !BYTE	$68,$00,$40		; LAB	16384
-	; !BYTE	$2A,$0A			; CB	10
-	; !BYTE	$02			; ADD
-	; !BYTE	$78,$05,$40		; SAB	16389
-	; !BYTE	$00			; ZERO
-	; !BYTE	$5C			; RET
+;	!BYTE	$54			; CALL	_C000
+;_F000 	!WORD	_C000		
+;	!BYTE	$2C,$00,$04		; CW	1024
+;	!BYTE	$02			; ADD
+;	!BYTE	$7A,$00,$40		; SAW	16384
+;	!BYTE	$00			; ZERO
+;	!BYTE	$5C			; RET
 	; TODO: For the moment, all but the last BYTE directive must have an even
 	; TODO: number of bytes in it to avoid padding.
-	BYTE 0x2c, 0x34, 0x12, 0x7a, 0x00, 0x40, 0x2c, 0x89, 0x67, 0x7a, 0x03, 0x40
-	BYTE 0x6a, 0x00, 0x40, 0x6a, 0x03, 0x40, 0x02, 0x7a, 0x00, 0x40, 0x68, 0x00
-	BYTE 0x40, 0x2a, 0x0a, 0x02, 0x78, 0x05, 0x40, 0x00, 0x5c
+	BYTE 0x54, _c000 & 0xff, (_c000 & 0xff00)>>8, 0x2c, 0x00, 0x04, 0x02, 0x7a
+	BYTE 0x00, 0x40, 0x00, 0x5c
+
+; <stdin>: 0002: def foo()
+;_C000 					; foo()
+;	JSR	INTERP
+; <stdin>: 0003:     return 42
+;	!BYTE	$2A,$2A			; CB	42
+;	!BYTE	$5C			; RET
+_c000:
+	jsr ripw, r0, interp
+	BYTE 0x2a, 0x2a, 0x5c
 
 heap_start:

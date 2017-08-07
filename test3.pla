@@ -1,0 +1,6 @@
+const addr1 = $4000
+def foo()
+    return 42
+end
+*addr1 = foo() + 1024 
+done
