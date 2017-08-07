@@ -1,0 +1,38 @@
+; ACME COMPATIBLE OUTPUT
+	JMP	_INIT			; MODULE INITIALIZATION ROUTINE
+; <stdin>: 0001: const addr1 = $4000
+					; addr1 = 16384
+; <stdin>: 0002: def foo(a, b, c)
+					; a -> [0]
+					; b -> [2]
+					; c -> [4]
+_C000 					; foo()
+	JSR	INTERP
+; <stdin>: 0003:     return a + b + c
+	!BYTE	$58,$06,$03		; ENTER	6,3
+	!BYTE	$66,$00			; LLW	[0]
+	!BYTE	$66,$02			; LLW	[2]
+	!BYTE	$02			; ADD
+	!BYTE	$66,$04			; LLW	[4]
+	!BYTE	$02			; ADD
+	!BYTE	$5A			; LEAVE
+; <stdin>: 0004: end
+; <stdin>: 0005: *addr1 = foo(10, 20, 30) - 5
+_INIT 
+	JSR	INTERP
+; <stdin>: 0006: done
+	!BYTE	$2A,$0A			; CB	10
+	!BYTE	$2A,$14			; CB	20
+	!BYTE	$2A,$1E			; CB	30
+	!BYTE	$54			; CALL	_C000
+_F000 	!WORD	_C000		
+	!BYTE	$2A,$05			; CB	5
+	!BYTE	$04			; SUB
+	!BYTE	$7A,$00,$40		; SAW	16384
+	!BYTE	$00			; ZERO
+	!BYTE	$5C			; RET
+_SYSFLAGS	=	0
+;
+; EXTERNAL/ENTRY SYMBOL DICTIONARY
+;
+					; END OF ESD

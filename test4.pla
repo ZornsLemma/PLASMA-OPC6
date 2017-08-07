@@ -1,0 +1,6 @@
+const addr1 = $4000
+def foo(a, b, c)
+    return a + b + c
+end
+*addr1 = foo(10, 20, 30) - 5
+done

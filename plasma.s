@@ -1,21 +1,24 @@
 ; Register use:
 ; R1 = expression stack pointer
 ; R2 = heap pointer
-; R3 = frame pointer
-; R4 = bytecode instruction pointer (word)
-; R5 = bytecode instruction pointer (byte within word)
+; R3 = frame pointer (within plasma_data)
+; R4 = string pool pointer (within plasma_data)
+; R5 = bytecode instruction pointer (word)
+; R6 = bytecode instruction pointer (byte within word)
 ; R13 = stack pointer
 ; R14 = link register
 	EQU restk,  1
 	EQU rheap,  2
 	EQU rifp,   3
-	EQU ripw,   4
-	EQU ripb,   5
+	EQU rpp,    4
+	EQU ripw,   5
+	EQU ripb,   6
 	EQU rsp,   13
 	EQU rlink, 14
 
 	EQU expression_stack_top, 0x0200
 	EQU plasma_data, 0x8000
+	EQU frame_stack_top, 0xf000
 	EQU stack_top, 0xf000
 
 	ORG 0x0000
@@ -25,6 +28,8 @@
 vminit:
 	mov restk, r0, expression_stack_top
 	mov rheap, r0, heap_start
+	mov rifp, r0, frame_stack_top
+	mov rpp, rifp
 	mov rsp, r0, stack_top
 	jsr rlink, r0, a1cmd
 	halt r0, r0, 0x999
@@ -138,6 +143,66 @@ call:
 	pop ripw, rsp
 	pop pc, rsp
 
+; TODO: Possibly if we always ensured frames were word-aligned we could just use OPC
+; word operations to copy the parameter from estk into the frame.
+enter:
+	; TODO: We can't push rlink, rsp here because we want to store some things on
+	; rsp which remain there when we return to the interpreter loop. The 6502 VM
+	; doesn't have a problem with this because it doesn't call opcode handlers
+	; via JSR, and we should probably do the same. For now we just rely on r8 not
+	; being corrupted by anything we call here.
+	mov r8, rlink
+	jsr rlink, r0, get_two_byte_operands # r10=frame size, r11=param count
+	; Save frame size for LEAVE
+	push r10, rsp
+	; Allocate frame
+	sub rpp, r10
+	mov rifp, rpp
+	; TODO: CHECKVSHEAP
+	; Move parameters from estk into frame
+	; Each parameter is 2 bytes, so set r10=ifp+r11*2; it then points one byte
+	; above the last parameter's space in the frame.
+	mov r9, r11
+	mov r10, r11
+	add r10, r10
+	add r10, rifp
+enter_loop:
+	cmp r9, r0
+	z.mov pc, r0, enter_done
+	sub r9, r0, 1
+
+	pop r12, restk
+
+	; Store high byte of parameter in frame
+	sub r10, r0, 1
+	mov r11, r12
+	bswp r11, r11
+	; TODO: overzealous saving of registers around store_plasma_byte call
+	push r9, rsp
+	push r10, rsp
+	push r12, rsp
+	jsr rlink, r0, store_plasma_byte
+	pop r12, rsp
+	pop r10, rsp
+	pop r9, rsp
+
+	; Store low byte of parameter in frame
+	sub r10, r0, 1
+	mov r11, r12
+	; TODO: overzealous saving of registers around store_plasma_byte call
+	push r9, rsp
+	push r10, rsp
+	push r12, rsp
+	jsr rlink, r0, store_plasma_byte
+	pop r12, rsp
+	pop r10, rsp
+	pop r9, rsp
+
+	mov pc, r0, enter_loop
+
+enter_done:
+	mov pc, r8
+
 ret:
 	pop pc, rsp
 
@@ -170,6 +235,18 @@ get_byte_operand_high:
 	bswp r10, r10
 	add ripw, r0, r1
 	mov pc, rlink
+
+	; ripw/ripb point at an opcode with a two one-byte operands.
+	; Advance ripw/ripb by 3 bytes and return with r10 containing the first byte operand
+	; and r11 containing the second.
+get_two_byte_operands:
+	push rlink, rsp
+	jsr rlink, r0, get_word_operand
+	mov r11, r10
+	and r10, r0, 0x00ff
+	and r11, r0, 0xff00
+	bswp r11, r11
+	pop pc, rsp
 
 	; ripw/ripb point at an opcode with a two-byte operand.
 	; Advance ripw/ripb by 3 bytes and return with r10 containing the two-byte operand.
@@ -314,7 +391,6 @@ brtru:
 brnch:
 ibrnch:
 ical:
-enter:
 leave:
 cffb:
 lb:
@@ -335,26 +411,37 @@ daw:
 ; Start executing compiled PLASMA code here
 a1cmd:
 	jsr ripw, r0, interp
+;	!BYTE	$2A,$0A			; CB	10
+;	!BYTE	$2A,$14			; CB	20
+;	!BYTE	$2A,$1E			; CB	30
 ;	!BYTE	$54			; CALL	_C000
 ;_F000 	!WORD	_C000		
-;	!BYTE	$2C,$00,$04		; CW	1024
-;	!BYTE	$02			; ADD
+;	!BYTE	$2A,$05			; CB	5
+;	!BYTE	$04			; SUB
 ;	!BYTE	$7A,$00,$40		; SAW	16384
 ;	!BYTE	$00			; ZERO
 ;	!BYTE	$5C			; RET
 	; TODO: For the moment, all but the last BYTE directive must have an even
 	; TODO: number of bytes in it to avoid padding.
-	BYTE 0x54, _c000 & 0xff, (_c000 & 0xff00)>>8, 0x2c, 0x00, 0x04, 0x02, 0x7a
-	BYTE 0x00, 0x40, 0x00, 0x5c
+	BYTE 0x2a, 0x0a, 0x2a, 0x14, 0x2a, 0x1e, 0x54, _c000 & 0xff, (_c000 & 0xff00)>>8, 0x2a
+	BYTE 0x05, 0x04, 0x7a, 0x00, 0x40, 0x00, 0x5c
 
-; <stdin>: 0002: def foo()
+; <stdin>: 0002: def foo(a, b, c)
+					; a -> [0]
+					; b -> [2]
+					; c -> [4]
 ;_C000 					; foo()
 ;	JSR	INTERP
-; <stdin>: 0003:     return 42
-;	!BYTE	$2A,$2A			; CB	42
-;	!BYTE	$5C			; RET
+; <stdin>: 0003:     return a + b + c
+;	!BYTE	$58,$06,$03		; ENTER	6,3
+;	!BYTE	$66,$00			; LLW	[0]
+;	!BYTE	$66,$02			; LLW	[2]
+;	!BYTE	$02			; ADD
+;	!BYTE	$66,$04			; LLW	[4]
+;	!BYTE	$02			; ADD
+;	!BYTE	$5A			; LEAVE
 _c000:
 	jsr ripw, r0, interp
-	BYTE 0x2a, 0x2a, 0x5c
+	BYTE 0x58, 0x06, 0x03, 0x66, 0x00, 0x66, 0x02, 0x02, 0x66, 0x04, 0x02, 0x5a
 
 heap_start:
