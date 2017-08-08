@@ -36,6 +36,7 @@ vminit:
 
 interp:
 	push rlink, rsp
+	push rifp, rsp
 	mov ripb, r0, 0			# First opcode in a function is always byte 0
 interp_loop:
 	; Get the next opcode byte into r10
@@ -86,6 +87,15 @@ add:
 	jsr rlink, r0, inc_ip
 	pop pc, rsp
 
+sub:
+	push rlink, rsp
+	pop r11, restk
+	pop r10, restk
+	sub r10, r11
+	push r10, restk
+	jsr rlink, r0, inc_ip
+	pop pc, rsp
+
 cb:
 	push rlink, rsp
 	jsr rlink, r0, get_byte_operand
@@ -126,6 +136,16 @@ law:
 	push rlink, rsp
 	jsr rlink, r0, get_word_operand
 	; TODO: Macro instead of subroutine?
+	jsr rlink, r0, load_plasma_word
+	push r11, restk
+	pop pc, rsp
+
+	; TODO: Although the word can *always* be at an odd address, this could benefit
+	; from the frame stack being word aligned
+llw:
+	push rlink, rsp
+	jsr rlink, r0, get_byte_operand
+	add r10, rifp
 	jsr rlink, r0, load_plasma_word
 	push r11, restk
 	pop pc, rsp
@@ -203,7 +223,18 @@ enter_loop:
 enter_done:
 	mov pc, r8
 
+leave:
+	; Get frame size from stack
+	pop r10, rsp
+	add rifp, r10
+	mov rpp, rifp
+	pop rifp, rsp
+	pop pc, rsp
+
 ret:
+	; Frame size is 0
+	mov rpp, rifp
+	pop rifp, rsp
 	pop pc, rsp
 
 	; Advance ripw/ripb by one byte.
@@ -352,7 +383,6 @@ load_plasma_word_split:
 	bswp r11, r11
 	mov pc, rlink
 
-sub:
 mul:
 div:
 mod:
@@ -391,12 +421,10 @@ brtru:
 brnch:
 ibrnch:
 ical:
-leave:
 cffb:
 lb:
 lw:
 llb:
-llw:
 dlb:
 dlw:
 sb:
