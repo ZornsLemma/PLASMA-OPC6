@@ -86,6 +86,12 @@ incr:
 	jsr rlink, r0, inc_ip
 	pop pc, rsp
 
+drop:
+	push rlink, rsp
+	pop r10, restk
+	jsr rlink, r0, inc_ip
+	pop pc, rsp
+
 add:
 	push rlink, rsp
 	pop r10, restk
@@ -452,7 +458,6 @@ land:
 la:
 lla:
 cs:
-drop:
 dup:
 pushep:
 pullep:
