@@ -274,6 +274,7 @@ brnch:
 	push rlink, rsp
 branch_internal:
 	jsr rlink, r0, get_word_operand
+	sub r10, r0, 2 # rip has been advanced 3 bytes, but the branch offset is expressed as if it had only been advanced 1 byte
 	asr r10, r10
 	nc.mov pc, r0, branch_internal_even
 	xor ripb, r0, 1
