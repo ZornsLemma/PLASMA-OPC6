@@ -78,6 +78,14 @@ zero:
 	jsr rlink, r0, inc_ip
 	pop pc, rsp
 
+incr:
+	push rlink, rsp
+	pop r10, restk
+	inc r10, 1
+	push r10, restk
+	jsr rlink, r0, inc_ip
+	pop pc, rsp
+
 add:
 	push rlink, rsp
 	pop r10, restk
@@ -108,6 +116,22 @@ cw:
 	; favour simplicity over performance for now.
 	jsr rlink, r0, get_word_operand
 	push r10, restk
+	pop pc, rsp
+
+sb:
+	push rlink, rsp
+	pop r10, restk
+	pop r11, restk
+	jsr rlink, r0, store_plasma_byte
+	jsr rlink, r0, inc_ip
+	pop pc, rsp
+
+dab:
+	push rlink, rsp
+	jsr rlink, r0, get_word_operand
+	pop r11, restk
+	push r11, restk
+	jsr rlink, r0, store_plasma_byte
 	pop pc, rsp
 
 sab:
@@ -235,6 +259,32 @@ ret:
 	; Frame size is 0
 	mov rpp, rifp
 	pop rifp, rsp
+	pop pc, rsp
+
+brgt:
+	push rlink, rsp
+	pop r10, restk
+	pop r11, restk
+	push r11, restk
+	sub r10, r11
+	mi.mov pc, r0, branch_internal
+	mov pc, r0, nobranch_internal
+
+brnch:
+	push rlink, rsp
+branch_internal:
+	jsr rlink, r0, get_word_operand
+	asr r10, r10
+	nc.mov pc, r0, branch_internal_even
+	xor ripb, r0, 1
+	z.inc ripw, 1
+branch_internal_even:
+	add ripw, r10
+	pop pc, rsp
+
+nobranch_internal:
+	; TODO: We don't want the operand so we could just advance ripw/ripb by 3 bytes
+	jsr rlink, r0, get_word_operand
 	pop pc, rsp
 
 	; Advance ripw/ripb by one byte.
@@ -386,7 +436,6 @@ load_plasma_word_split:
 mul:
 div:
 mod:
-incr:
 decr:
 neg:
 comp:
@@ -406,7 +455,6 @@ drop:
 dup:
 pushep:
 pullep:
-brgt:
 brlt:
 breq:
 brne:
@@ -418,7 +466,6 @@ isge:
 isle:
 brfls:
 brtru:
-brnch:
 ibrnch:
 ical:
 cffb:
@@ -427,11 +474,9 @@ lw:
 llb:
 dlb:
 dlw:
-sb:
 sw:
 slb:
 slw:
-dab:
 daw:
 	halt r0, r0, 0xffff
 
@@ -439,37 +484,31 @@ daw:
 ; Start executing compiled PLASMA code here
 a1cmd:
 	jsr ripw, r0, interp
-;	!BYTE	$2A,$0A			; CB	10
-;	!BYTE	$2A,$14			; CB	20
-;	!BYTE	$2A,$1E			; CB	30
-;	!BYTE	$54			; CALL	_C000
-;_F000 	!WORD	_C000		
-;	!BYTE	$2A,$05			; CB	5
-;	!BYTE	$04			; SUB
-;	!BYTE	$7A,$00,$40		; SAW	16384
-;	!BYTE	$00			; ZERO
-;	!BYTE	$5C			; RET
-	; TODO: For the moment, all but the last BYTE directive must have an even
-	; TODO: number of bytes in it to avoid padding.
-	BYTE 0x2a, 0x0a, 0x2a, 0x14, 0x2a, 0x1e, 0x54, _c000 & 0xff, (_c000 & 0xff00)>>8, 0x2a
-	BYTE 0x05, 0x04, 0x7a, 0x00, 0x40, 0x00, 0x5c
-
-; <stdin>: 0002: def foo(a, b, c)
-					; a -> [0]
-					; b -> [2]
-					; c -> [4]
-;_C000 					; foo()
-;	JSR	INTERP
-; <stdin>: 0003:     return a + b + c
-;	!BYTE	$58,$06,$03		; ENTER	6,3
-;	!BYTE	$66,$00			; LLW	[0]
-;	!BYTE	$66,$02			; LLW	[2]
-;	!BYTE	$02			; ADD
-;	!BYTE	$66,$04			; LLW	[4]
-;	!BYTE	$02			; ADD
-;	!BYTE	$5A			; LEAVE
-_c000:
-	jsr ripw, r0, interp
-	BYTE 0x58, 0x06, 0x03, 0x66, 0x00, 0x66, 0x02, 0x02, 0x66, 0x04, 0x02, 0x5a
+; 	!BYTE	$2A,$01			; CB	1
+; _B002 
+; 	!BYTE	$7C			; DAB	_D000+0
+; _F000 	!WORD	_D000+0		
+; 	!BYTE	$2A,$0A			; CB	10
+; 	!BYTE	$38			; BRGT	_B001
+; 	!WORD	_B001-*
+; 	!BYTE	$0C			; INCR
+; ; <stdin>: 0004:     ^(addr + i) = i
+; ; <stdin>: 0005: next
+; 	!BYTE	$68			; LAB	_D000+0
+; _F001 	!WORD	_D000+0		
+; 	!BYTE	$2C,$00,$40		; CW	16384
+; 	!BYTE	$68			; LAB	_D000+0
+; _F002 	!WORD	_D000+0		
+; 	!BYTE	$02			; ADD
+; 	!BYTE	$70			; SB
+; 	!BYTE	$50			; BRNCH	_B002
+; 	!WORD	_B002-*
+; _B001 
+; 	!BYTE	$30			; DROP
+; ; <stdin>: 0006: done
+; 	!BYTE	$00			; ZERO
+; 	!BYTE	$5C			; RET
+	BYTE 0x2a, 0x01, 0x7c, 0x00, 0x50, 0x2a, 0x0a, 0x38,   18, 0x00, 0x0c, 0x68, 0x00, 0x50
+	BYTE 0x2c, 0x00, 0x40, 0x68, 0x00, 0x50, 0x02, 0x70, 0x50, 0xeb, 0xff, 0x30, 0x00, 0x5c
 
 heap_start:

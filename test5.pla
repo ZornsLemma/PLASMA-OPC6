@@ -1,0 +1,6 @@
+const addr = $4000
+byte i
+for i = 1 to 10
+    ^(addr + i) = i
+next
+done
