@@ -520,8 +520,7 @@ _b002:B
 	UWORD 0x5000
 	UBYTE 0x2a, 0x0a
 	UBYTE 0x38
-_fakestar1:B
-	UWORD _b001-_fakestar1
+	UWORD _b001-_BPC_
 	UBYTE 0x0c
 	UBYTE 0x68
 	UWORD 0x5000
@@ -531,8 +530,7 @@ _fakestar1:B
 	UBYTE 0x02
 	UBYTE 0x70
 	UBYTE 0x50
-_fakestar2:B
-	UWORD _b002-_fakestar2
+	UWORD _b002-_BPC_
 _b001:B
 	UBYTE 0x30
 	UBYTE 0x00
