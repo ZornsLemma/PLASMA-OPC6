@@ -20,7 +20,6 @@ for line in sys.stdin:
             c[1] = 'UWORD'
         elif c[1] == '=':
             assert len(c) == 3
-            print '\tALIGN' # TODO: Not sure why this is needed, but no big deal
             c = ['', 'EQU ' + c[0] + ', ' + c[2]]
         elif c[1] == '!FILL':
             c[1] = 'UBYTE'
