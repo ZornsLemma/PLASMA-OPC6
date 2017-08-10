@@ -10,7 +10,7 @@ for line in sys.stdin:
 
     if len(c) >= 2:
         if c[1] == 'JMP':
-            c[1] = 'mov pc,'
+            c[1] = 'mov pc, r0,'
         elif c[1] == 'JSR':
             c[1] = 'jsr ripw, r0, interp'
             del c[2:]
@@ -20,13 +20,28 @@ for line in sys.stdin:
             c[1] = 'UWORD'
         elif c[1] == '=':
             assert len(c) == 3
+            print '\tALIGN' # TODO: Not sure why this is needed, but no big deal
             c = ['', 'EQU ' + c[0] + ', ' + c[2]]
+        elif c[1] == '!FILL':
+            c[1] = 'UBYTE'
+            count = int(c[2])
+            c[2] = ''
+            for i in range(count):
+                c[2] += '0x00,'
+            c[2] = c[2][:-1]
+
+    if len(c) >= 3:
+        c[2] = c[2].replace('$', '0x')
+        c[2] = c[2].replace('*', '_BPC_')
 
     if len(c) >= 1:
+        c[0] = c[0].strip()
         if c[0] == '_INIT' or is_label_type(c[0], 'C'):
-            print('\tALIGN')
+            print '\tALIGN'
             c[0] = c[0].strip() + ':'
-        elif is_label_type(c[0], 'B') or is_label_type(c[0], 'F'):
+        elif is_label_type(c[0], 'B') or is_label_type(c[0], 'D') or is_label_type(c[0], 'F'):
             c[0] = c[0].strip() + ':B'
 
-    print '\t'.join(c)
+    s = '\t'.join(c)
+    s = s.replace(';', '#')
+    print s
