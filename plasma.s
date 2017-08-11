@@ -134,6 +134,20 @@ shl_done:
 	jsr rlink, r0, inc_ip
 	pop pc, rsp
 
+shr:
+	push rlink, rsp
+	pop r10, restk
+	z.mov pc, r0, shr_done
+	pop r11, restk
+shr_loop:
+	asr r11, r11
+	dec r10, 1
+	nz.mov pc, r0, shr_loop
+	push r11, restk
+shr_done:
+	jsr rlink, r0, inc_ip
+	pop pc, rsp
+
 cb:
 	push rlink, rsp
 	jsr rlink, r0, get_byte_operand
@@ -480,7 +494,6 @@ comp:
 band:
 ior:
 xor:
-shr:
 idxw:
 lnot:
 lor:
