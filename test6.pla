@@ -1,6 +1,6 @@
 const addr = $4000
 byte i
 for i = 1 to 10 step 2
-    *(addr + i) = (i << 4) >> 2
+    *(addr + i) = -2
 next
 done

@@ -154,6 +154,13 @@ cb:
 	push r10, restk
 	pop pc, rsp
 
+cffb:
+	push rlink, rsp
+	jsr rlink, r0, get_byte_operand
+	or r10, r0, 0xff00
+	push r10, restk
+	pop pc, rsp
+
 cw:
 	push rlink, rsp
 	; TODO: Might be better to use a macro to handle operand decoding but let's
@@ -517,7 +524,6 @@ brfls:
 brtru:
 ibrnch:
 ical:
-cffb:
 lb:
 lw:
 llb:
