@@ -1,6 +1,9 @@
 const addr = $4000
 def foo()
-    return 42
+    return 11
 end
-*addr = foo() & $12
+*addr = $5678
+if foo() > 10
+    *addr = $1234
+fin
 done

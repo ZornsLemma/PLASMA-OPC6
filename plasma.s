@@ -21,6 +21,30 @@
 	EQU frame_stack_top, 0xf000
 	EQU stack_top, 0xf000
 
+; http://anycpu.org/forum/viewtopic.php?f=3&t=426&start=15#p2888
+MACRO ltunsigned(lhs, rhs, result)
+        mov     result, r0
+        cmp     lhs, rhs 
+        nc.dec  result, 1
+ENDMACRO
+
+MACRO ltsigned(lhs, rhs, result, __signsdiffer, __done)
+        mov     result, lhs
+        xor     result, rhs
+        mi.dec  pc, __signsdiffer-PC
+
+        ltunsigned(lhs, rhs, result)
+        inc     pc, __done-PC
+
+__signsdiffer:
+        mov     result, r0
+        mov     r0, lhs
+        mi.dec  result, 1
+
+__done:
+
+ENDMACRO
+
 	ORG 0x0000
 	mov pc, r0, vminit
 
@@ -192,6 +216,15 @@ isne:
 	mov r12, r0
 	cmp r10, r11
 	nz.dec r12, 1
+	push r12, restk
+	jsr rlink, r0, inc_ip
+	pop pc, rsp
+
+isgt:
+	push rlink, rsp
+	pop r10, restk
+	pop r11, restk
+	ltsigned(r10, r11, r12)	
 	push r12, restk
 	jsr rlink, r0, inc_ip
 	pop pc, rsp
@@ -595,7 +628,6 @@ pushep:
 pullep:
 breq:
 brne:
-isgt:
 islt:
 isge:
 isle:
