@@ -1,10 +1,6 @@
 const addr = $4000
-byte str[] = "foo"
-byte i
-word w
-for i = 0 to 9
-    w = addr + i*2
-    *w = $ff00+i
-    ^w = (^w) ^ $01
-next
+def foo(a, b)
+    return a + a + b
+end
+*addr = foo(10, 100)
 done
