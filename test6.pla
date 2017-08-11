@@ -2,5 +2,8 @@ const addr = $4000
 byte i
 for i = 9 downto 1 step 2
     *(addr + i) = $FF00+i
+    if i == 5
+    	*(addr + i) = $EEEE
+    fin
 next
 done

@@ -148,6 +148,17 @@ shr_done:
 	jsr rlink, r0, inc_ip
 	pop pc, rsp
 
+iseq:
+	push rlink, rsp
+	pop r10, restk
+	pop r11, restk
+	mov r12, r0
+	cmp r10, r11
+	z.dec r12, 1
+	push r12, restk
+	jsr rlink, r0, inc_ip
+	pop pc, rsp
+
 cb:
 	push rlink, rsp
 	jsr rlink, r0, get_byte_operand
@@ -338,6 +349,12 @@ brgt:
 	mi.mov pc, r0, branch_internal
 	mov pc, r0, nobranch_internal
 
+brfls:
+	push rlink, rsp
+	pop r10, restk
+	z.mov pc, r0, branch_internal
+	mov pc, r0, nobranch_internal
+
 brnch:
 	push rlink, rsp
 branch_internal:
@@ -522,13 +539,11 @@ pushep:
 pullep:
 breq:
 brne:
-iseq:
 isne:
 isgt:
 islt:
 isge:
 isle:
-brfls:
 brtru:
 ibrnch:
 ical:
