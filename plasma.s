@@ -320,6 +320,15 @@ ret:
 	pop rifp, rsp
 	pop pc, rsp
 
+brlt:
+	push rlink, rsp
+	pop r10, restk
+	pop r11, restk
+	push r11, restk
+	sub r11, r10
+	mi.mov pc, r0, branch_internal
+	mov pc, r0, nobranch_internal
+
 brgt:
 	push rlink, rsp
 	pop r10, restk
@@ -511,7 +520,6 @@ cs:
 dup:
 pushep:
 pullep:
-brlt:
 breq:
 brne:
 iseq:
