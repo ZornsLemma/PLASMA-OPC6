@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+set -o pipefail
 ~/src/PLASMA/src/plasm -AO < "$1" > compiled.a
 cat plasma.s > merged.s
 python convert.py < compiled.a >> merged.s
