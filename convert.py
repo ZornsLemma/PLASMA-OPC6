@@ -5,6 +5,9 @@ def is_label_type(label, prefix):
     # let's just do this for now.
     return len(label) >= 3 and label[0:2] == '_' + prefix
 
+pending_d_labels = []
+
+in_d_label = False
 for line in sys.stdin:
     c = line[:-1].split('\t')
 
@@ -33,18 +36,43 @@ for line in sys.stdin:
         c[2] = c[2].replace('$', '0x')
         c[2] = c[2].replace('*', '_BPC_')
 
+    is_d_label = False
     if len(c) >= 1:
         c[0] = c[0].strip()
+        is_d_label = is_label_type(c[0], 'D')
         if c[0] == '_INIT' or is_label_type(c[0], 'C'):
             print '\tALIGN'
             c[0] = c[0].strip() + ':'
-        # TODO: 'D' labels allocate data and therefore they need to be "saved
-        # up" and put into the actual plasma_data area with their values set to
-        # their address within the plasma_data area. What we're currently doing
-        # is nonsense, though we get away with it.
-        elif is_label_type(c[0], 'B') or is_label_type(c[0], 'D') or is_label_type(c[0], 'F'):
+        elif is_label_type(c[0], 'B') or is_d_label or is_label_type(c[0], 'F'):
             c[0] = c[0].strip() + ':B'
 
+    if is_d_label:
+        in_d_label = True
+    elif c[0]:
+        in_d_label = False
+
+    if in_d_label:
+        pending_d_labels.append(c)
+    else:
+        s = '\t'.join(c)
+        s = s.replace(';', '#')
+        print s
+
+# TODO: We might want to start this at plasma_data+0x200bytes or something like
+# that, so as to leave "zero page" and the "stack page" in the data space free.
+# No point wasting space, but I suspect it may be necessary/desirable to use
+# "zero page" for some communication between the OPC6 machine and the PLASMA VM
+# - possibly not, let's see how it goes.
+print "\tORG plasma_data"
+for c in pending_d_labels:
+    label = None
+    if c[0]:
+        label = c[0]
+        c[0] = '_internal' + c[0]
     s = '\t'.join(c)
     s = s.replace(';', '#')
     print s
+    if label:
+        assert label[-2:] == ':B'
+        label = label[:-2]
+        print '\tEQU ' + label + ', _internal' + label + '-2*plasma_data'
