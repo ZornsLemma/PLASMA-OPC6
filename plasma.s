@@ -119,6 +119,15 @@ neg:
 	jsr rlink, r0, inc_ip
 	pop pc, rsp
 
+xor:
+	push rlink, rsp
+	pop r10, restk
+	pop r11, restk
+	xor r10, r11
+	push r10, restk
+	jsr rlink, r0, inc_ip
+	pop pc, rsp
+
 	; TODO: shl/shr can probably optimise the case of shifting by 8 bits, e.g. using bswp
 shl:
 	push rlink, rsp
@@ -204,6 +213,14 @@ sw:
 	pop r10, restk
 	pop r11, restk
 	jsr rlink, r0, store_plasma_word
+	jsr rlink, r0, inc_ip
+	pop pc, rsp
+
+lw:
+	push rlink, rsp
+	pop r10, restk
+	jsr rlink, r0, load_plasma_word
+	push r11, restk
 	jsr rlink, r0, inc_ip
 	pop pc, rsp
 
@@ -543,7 +560,6 @@ decr:
 comp:
 band:
 ior:
-xor:
 idxw:
 lnot:
 lor:
@@ -563,7 +579,6 @@ isle:
 ibrnch:
 ical:
 lb:
-lw:
 llb:
 dlb:
 dlw:

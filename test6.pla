@@ -1,11 +1,9 @@
 const addr = $4000
 byte i
-for i = 9 downto 1 step 2
-    *(addr + i) = $FF00+i
-    if i - 5 == 0
-    	*(addr + i) = $EEEE
-    else
-    	*(addr + i) = $CCCC
-    fin
+word w
+for i = 0 to 9
+    w = addr + i*2
+    *w = $ff00+i
+    *w = (*w) ^ $f001
 next
 done

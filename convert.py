@@ -38,6 +38,10 @@ for line in sys.stdin:
         if c[0] == '_INIT' or is_label_type(c[0], 'C'):
             print '\tALIGN'
             c[0] = c[0].strip() + ':'
+        # TODO: 'D' labels allocate data and therefore they need to be "saved
+        # up" and put into the actual plasma_data area with their values set to
+        # their address within the plasma_data area. What we're currently doing
+        # is nonsense, though we get away with it.
         elif is_label_type(c[0], 'B') or is_label_type(c[0], 'D') or is_label_type(c[0], 'F'):
             c[0] = c[0].strip() + ':B'
 
