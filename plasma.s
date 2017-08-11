@@ -110,6 +110,30 @@ sub:
 	jsr rlink, r0, inc_ip
 	pop pc, rsp
 
+neg:
+	push rlink, rsp
+	pop r10, restk
+	; http://anycpu.org/forum/viewtopic.php?f=3&t=395#p2851
+	not r10, r10, -1
+	push r10, restk
+	jsr rlink, r0, inc_ip
+	pop pc, rsp
+
+	; TODO: shl/shr can probably optimise the case of shifting by 8 bits, e.g. using bswp
+shl:
+	push rlink, rsp
+	pop r10, restk
+	z.mov pc, r0, shl_done
+	pop r11, restk
+shl_loop:
+	add r11, r11
+	dec r10, 1
+	nz.mov pc, r0, shl_loop
+	push r11, restk
+shl_done:
+	jsr rlink, r0, inc_ip
+	pop pc, rsp
+
 cb:
 	push rlink, rsp
 	jsr rlink, r0, get_byte_operand
@@ -129,6 +153,14 @@ sb:
 	pop r10, restk
 	pop r11, restk
 	jsr rlink, r0, store_plasma_byte
+	jsr rlink, r0, inc_ip
+	pop pc, rsp
+
+sw:
+	push rlink, rsp
+	pop r10, restk
+	pop r11, restk
+	jsr rlink, r0, store_plasma_word
 	jsr rlink, r0, inc_ip
 	pop pc, rsp
 
@@ -444,12 +476,10 @@ mul:
 div:
 mod:
 decr:
-neg:
 comp:
 band:
 ior:
 xor:
-shl:
 shr:
 idxw:
 lnot:
@@ -480,7 +510,6 @@ lw:
 llb:
 dlb:
 dlw:
-sw:
 slb:
 slw:
 daw:
