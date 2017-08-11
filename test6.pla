@@ -5,6 +5,6 @@ word w
 for i = 0 to 9
     w = addr + i*2
     *w = $ff00+i
-    *w = (*w) ^ $f001
+    ^w = (^w) ^ $01
 next
 done

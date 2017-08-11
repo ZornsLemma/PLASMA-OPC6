@@ -216,6 +216,14 @@ sw:
 	jsr rlink, r0, inc_ip
 	pop pc, rsp
 
+lb:
+	push rlink, rsp
+	pop r10, restk
+	jsr rlink, r0, load_plasma_byte
+	push r11, restk
+	jsr rlink, r0, inc_ip
+	pop pc, rsp
+
 lw:
 	push rlink, rsp
 	pop r10, restk
@@ -578,7 +586,6 @@ isge:
 isle:
 ibrnch:
 ical:
-lb:
 llb:
 dlb:
 dlw:
