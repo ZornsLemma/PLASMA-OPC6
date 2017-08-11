@@ -1,6 +1,6 @@
 const addr = $4000
-def foo(a, b)
-    return a + a + b
+def foo()
+    return 42
 end
-*addr = foo(10, 100)
+*addr = foo() & $12
 done

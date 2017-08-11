@@ -127,6 +127,15 @@ neg:
 	jsr rlink, r0, inc_ip
 	pop pc, rsp
 
+band:
+	push rlink, rsp
+	pop r10, restk
+	pop r11, restk
+	and r10, r11
+	push r10, restk
+	jsr rlink, r0, inc_ip
+	pop pc, rsp
+
 xor:
 	push rlink, rsp
 	pop r10, restk
@@ -574,7 +583,6 @@ div:
 mod:
 decr:
 comp:
-band:
 ior:
 idxw:
 lnot:
