@@ -28,20 +28,20 @@ MACRO ltunsigned(lhs, rhs, result)
         nc.dec  result, 1
 ENDMACRO
 
-MACRO ltsigned(lhs, rhs, result, __signsdiffer, __done)
+MACRO ltsigned(lhs, rhs, result)
         mov     result, lhs
         xor     result, rhs
-        mi.dec  pc, __signsdiffer-PC
+        mi.dec  pc, __signsdiffer_@-PC
 
         ltunsigned(lhs, rhs, result)
-        inc     pc, __done-PC
+        inc     pc, __done_@-PC
 
-__signsdiffer:
+__signsdiffer_@:
         mov     result, r0
         mov     r0, lhs
         mi.dec  result, 1
 
-__done:
+__done_@:
 
 ENDMACRO
 
@@ -255,7 +255,7 @@ isgt:
 	push rlink, rsp
 	pop r10, restk
 	pop r11, restk
-	ltsigned(r10, r11, r12, TODO1, TODO2)	
+	ltsigned(r10, r11, r12)	
 	push r12, restk
 	jsr rlink, r0, inc_ip
 	pop pc, rsp
@@ -264,7 +264,7 @@ islt:
 	push rlink, rsp
 	pop r10, restk
 	pop r11, restk
-	ltsigned(r11, r10, r12, TODO3, TODO4)	
+	ltsigned(r11, r10, r12)	
 	push r12, restk
 	jsr rlink, r0, inc_ip
 	pop pc, rsp
