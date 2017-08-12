@@ -172,12 +172,24 @@ land:
 	push rlink, rsp
 	mov r12, r0, 0xffff
 	pop r10, restk
-	z.mov r12, 0
+	z.mov r12, r0
 	pop r11, restk
-	z.mov r12, 0
+	z.mov r12, r0
 	push r12, restk
 	jsr rlink, r0, inc_ip
 	pop pc, rsp
+
+lor:
+	push rlink, rsp
+	mov r12, r0, 0xffff
+	pop r10, restk
+	pop r11, restk
+	or r10, r11
+	z.mov r12, r0
+	push r10, restk
+	jsr rlink, r0, inc_ip
+	pop pc, rsp
+
 
 xor:
 	push rlink, rsp
@@ -646,7 +658,6 @@ comp:
 ior:
 idxw:
 lnot:
-lor:
 la:
 lla:
 cs:
