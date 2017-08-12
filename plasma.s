@@ -110,6 +110,14 @@ incr:
 	jsr rlink, r0, inc_ip
 	pop pc, rsp
 
+decr:
+	push rlink, rsp
+	pop r10, restk
+	dec r10, 1
+	push r10, restk
+	jsr rlink, r0, inc_ip
+	pop pc, rsp
+
 dup:
 	push rlink, rsp
 	pop r10, restk
@@ -623,7 +631,6 @@ load_plasma_word_split:
 mul:
 div:
 mod:
-decr:
 comp:
 ior:
 idxw:

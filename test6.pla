@@ -6,4 +6,5 @@ end
 if foo() < 10
     *addr = $1234
 fin
+*addr = *addr - 1
 done
