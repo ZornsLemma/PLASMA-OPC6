@@ -224,7 +224,16 @@ isgt:
 	push rlink, rsp
 	pop r10, restk
 	pop r11, restk
-	ltsigned(r10, r11, r12)	
+	ltsigned(r10, r11, r12, TODO1, TODO2)	
+	push r12, restk
+	jsr rlink, r0, inc_ip
+	pop pc, rsp
+
+islt:
+	push rlink, rsp
+	pop r10, restk
+	pop r11, restk
+	ltsigned(r11, r10, r12, TODO3, TODO4)	
 	push r12, restk
 	jsr rlink, r0, inc_ip
 	pop pc, rsp
@@ -628,7 +637,6 @@ pushep:
 pullep:
 breq:
 brne:
-islt:
 isge:
 isle:
 ibrnch:
