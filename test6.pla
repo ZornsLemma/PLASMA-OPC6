@@ -3,8 +3,7 @@ def foo()
     return 9 
 end
 *addr = $5678
-if foo() < 10
+if foo() > 10 and foo() > 5 
     *addr = $1234
 fin
-*addr = *addr - 1
 done
