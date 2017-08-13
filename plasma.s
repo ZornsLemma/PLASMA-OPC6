@@ -415,6 +415,14 @@ llw:
 	push r11, restk
 	pop pc, rsp
 
+llb:
+	push rlink, rsp
+	jsr rlink, r0, get_byte_operand
+	add r10, rifp
+	jsr rlink, r0, load_plasma_byte
+	push r11, restk
+	pop pc, rsp
+
 	; TODO: Although the word can *always* be at an odd address, this could benefit
 	; from the frame stack being word aligned
 slw:
@@ -423,6 +431,14 @@ slw:
 	add r10, rifp
 	pop r11, restk
 	jsr rlink, r0, store_plasma_word
+	pop pc, rsp
+
+slb:
+	push rlink, rsp
+	jsr rlink, r0, get_byte_operand
+	add r10, rifp
+	pop r11, restk
+	jsr rlink, r0, store_plasma_byte
 	pop pc, rsp
 
 lla:
@@ -709,7 +725,7 @@ load_plasma_byte:
 	and r11, r0, 0x00ff
 	mov pc, rlink
 load_plasma_byte_odd:
-	ld r11, r12, plasma_data+1
+	ld r11, r12, plasma_data
 	bswp r11, r11
 	and r11, r0, 0x00ff
 	mov pc, rlink
@@ -743,10 +759,8 @@ pushep:
 pullep:
 ibrnch:
 ical:
-llb:
 dlb:
 dlw:
-slb:
 daw:
 	halt r0, r0, 0xffff
 
