@@ -285,6 +285,17 @@ islt:
 	jsr rlink, r0, inc_ip
 	pop pc, rsp
 
+isle:
+	push rlink, rsp
+	pop r10, restk
+	pop r11, restk
+	cmp r10, r11
+	z.mov pc, r0, isxxx_true
+	ltsigned(r11, r10, r12)	
+	push r12, restk
+	jsr rlink, r0, inc_ip
+	pop pc, rsp
+
 cb:
 	push rlink, rsp
 	jsr rlink, r0, get_byte_operand
@@ -681,7 +692,6 @@ pushep:
 pullep:
 breq:
 brne:
-isle:
 ibrnch:
 ical:
 llb:
