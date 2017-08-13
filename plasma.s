@@ -167,6 +167,16 @@ comp:
 	jsr rlink, r0, inc_ip
 	pop pc, rsp
 
+idxw:
+	push rlink, rsp
+	pop r10, restk
+	add r10, r10
+	pop r11, restk
+	add r10, r11
+	push r10, restk
+	jsr rlink, r0, inc_ip
+	pop pc, rsp
+	
 band:
 	push rlink, rsp
 	pop r10, restk
@@ -446,6 +456,15 @@ slb:
 	jsr rlink, r0, get_byte_operand
 	add r10, rifp
 	pop r11, restk
+	jsr rlink, r0, store_plasma_byte
+	pop pc, rsp
+
+dlb:
+	push rlink, rsp
+	jsr rlink, r0, get_byte_operand
+	add r10, rifp
+	pop r11, restk
+	push r11, restk
 	jsr rlink, r0, store_plasma_byte
 	pop pc, rsp
 
@@ -760,13 +779,11 @@ load_plasma_word_split:
 mul:
 div:
 mod:
-idxw:
 cs:
 pushep:
 pullep:
 ibrnch:
 ical:
-dlb:
 dlw:
 daw:
 	halt r0, r0, 0xffff
