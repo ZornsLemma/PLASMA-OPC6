@@ -1,14 +1,6 @@
 const addr = $4000
 def foo()
-    return 1 
+    return $1234
 end
-*addr = $5678
-when 1
-    is foo() <> 10
-	*addr = $9999
-	break
-    is foo() <> 11
-	*addr = $1234
-	break
-wend
+*addr = $5678 | foo()
 done

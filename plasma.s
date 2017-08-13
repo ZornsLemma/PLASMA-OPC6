@@ -168,6 +168,15 @@ band:
 	jsr rlink, r0, inc_ip
 	pop pc, rsp
 
+ior:
+	push rlink, rsp
+	pop r10, restk
+	pop r11, restk
+	or r10, r11
+	push r10, restk
+	jsr rlink, r0, inc_ip
+	pop pc, rsp
+
 land:
 	push rlink, rsp
 	mov r12, r0, 0xffff
@@ -702,7 +711,6 @@ mul:
 div:
 mod:
 comp:
-ior:
 idxw:
 lnot:
 la:
