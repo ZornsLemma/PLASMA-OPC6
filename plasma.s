@@ -260,6 +260,22 @@ isgt:
 	jsr rlink, r0, inc_ip
 	pop pc, rsp
 
+isge:
+	push rlink, rsp
+	pop r10, restk
+	pop r11, restk
+	cmp r10, r11
+	z.mov pc, r0, isxxx_true
+	ltsigned(r10, r11, r12)	
+	push r12, restk
+	jsr rlink, r0, inc_ip
+	pop pc, rsp
+isxxx_true:
+	mov r12, r0, 0xffff
+	push r12, restk
+	jsr rlink, r0, inc_ip
+	pop pc, rsp
+
 islt:
 	push rlink, rsp
 	pop r10, restk
@@ -665,7 +681,6 @@ pushep:
 pullep:
 breq:
 brne:
-isge:
 isle:
 ibrnch:
 ical:
