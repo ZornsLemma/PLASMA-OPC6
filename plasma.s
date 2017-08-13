@@ -502,6 +502,17 @@ brgt:
 	mi.mov pc, r0, branch_internal
 	mov pc, r0, nobranch_internal
 
+	; TODO: breq not tested; would need to write bytecode by hand as I don't think the
+	; compiler can currently emit it.
+breq:
+	push rlink, rsp
+	pop r10, restk
+	pop r11, restk
+	push r11, restk
+	cmp r10, r11
+	z.mov pc, r0, branch_internal
+	mov pc, r0, nobranch_internal
+
 brne:
 	push rlink, rsp
 	pop r10, restk
@@ -699,7 +710,6 @@ lla:
 cs:
 pushep:
 pullep:
-breq:
 ibrnch:
 ical:
 llb:

@@ -3,11 +3,11 @@ def foo()
     return 1 
 end
 *addr = $5678
-when foo()
-    is 4
+when 1
+    is foo() <> 10
 	*addr = $9999
 	break
-    is 8
+    is foo() <> 11
 	*addr = $1234
 	break
 wend
