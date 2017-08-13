@@ -159,6 +159,14 @@ neg:
 	jsr rlink, r0, inc_ip
 	pop pc, rsp
 
+comp:
+	push rlink, rsp
+	pop r10, restk
+	xor r10, r0, 0xffff
+	push r10, restk
+	jsr rlink, r0, inc_ip
+	pop pc, rsp
+
 band:
 	push rlink, rsp
 	pop r10, restk
@@ -752,7 +760,6 @@ load_plasma_word_split:
 mul:
 div:
 mod:
-comp:
 idxw:
 cs:
 pushep:

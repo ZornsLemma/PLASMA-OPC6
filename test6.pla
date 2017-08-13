@@ -1,11 +1,6 @@
 const addr = $4000
 def foo()
+    return 42
 end
-def bar(i)
-    byte j
-    j = i + 1
-    foo()
-    return j
-end
-*addr = bar($1230)
+*addr = ~foo()
 done
