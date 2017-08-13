@@ -1,8 +1,9 @@
 const addr = $4000
 word fp
-def foo()
-    return $1234
+asm foo()
+    mov r10, r0, 0xabcd
+    push r10, restk
+    mov pc, rlink
 end
-fp = @foo
-*addr = fp()
+*addr = foo()
 done

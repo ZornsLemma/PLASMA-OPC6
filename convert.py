@@ -40,7 +40,7 @@ for line in sys.stdin:
     if len(c) >= 1:
         c[0] = c[0].strip()
         is_d_label = is_label_type(c[0], 'D')
-        if c[0] == '_INIT' or is_label_type(c[0], 'C'):
+        if c[0] == '_INIT' or is_label_type(c[0], 'A') or is_label_type(c[0], 'C'):
             print '\tALIGN'
             c[0] = c[0].strip() + ':'
         elif is_label_type(c[0], 'B') or is_d_label or is_label_type(c[0], 'F'):
