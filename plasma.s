@@ -5,21 +5,24 @@
 ; R4 = string pool pointer (within plasma_data)
 ; R5 = bytecode instruction pointer (word)
 ; R6 = bytecode instruction pointer (byte within word)
-; R13 = stack pointer
-; R14 = link register
+; R13 = link register
+; R14 = stack pointer
 	EQU restk,  1
 	EQU rheap,  2
 	EQU rifp,   3
 	EQU rpp,    4
 	EQU ripw,   5
 	EQU ripb,   6
-	EQU rsp,   13
-	EQU rlink, 14
+	EQU rlink, 13
+	EQU rsp,   14
 
 	EQU expression_stack_top, 0x0200
 	EQU plasma_data, 0x8000
 	EQU frame_stack_top, 0xf000
 	EQU stack_top, 0xf000
+
+; Multiplication/division code taken from 
+; https://github.com/hoglet67/opc/blob/c_testing/examples/pi-spigot-c/lib.s
 
 ; http://anycpu.org/forum/viewtopic.php?f=3&t=426&start=15#p2888
 MACRO ltunsigned(lhs, rhs, result)
@@ -146,6 +149,108 @@ sub:
 	pop r11, restk
 	pop r10, restk
 	sub r10, r11
+	push r10, restk
+	jsr rlink, r0, inc_ip
+	pop pc, rsp
+
+MACRO   PUSH2( _d0_,_d1_, _ptr_)
+        push     _d0_,_ptr_
+        push     _d1_,_ptr_
+ENDMACRO
+
+MACRO   POP2( _d0_,_d1_, _ptr_)
+        pop      _d1_, _ptr_
+        pop      _d0_, _ptr_
+ENDMACRO
+
+MACRO   NEG( _reg_)
+        not _reg_,_reg_
+        inc _reg_, 1
+ENDMACRO
+
+MACRO   NEG2( _regmsw_, _reglsw_)
+        not _reglsw_,_reglsw_
+        not _regmsw_,_regmsw_
+        inc _reglsw_, 1
+        adc _regmsw_, r0
+ENDMACRO
+
+MACRO SW16A ( _sub_ )
+      push    r5, rsp
+      mov     r5, r0         # keep track of signs
+      add     r1, r0
+      pl.inc  pc, l1_@ - PC
+      NEG     (r1)
+      inc     r5, 1
+l1_@:
+      add     r2, r0
+      pl.inc  pc, l2_@ - PC
+      NEG     (r2)
+      dec     r5, 1
+l2_@:
+      jsr     rlink, r0, _sub_
+      cmp     r5, r0
+      z.inc   pc, l3_@ - PC
+      NEG2    (r2, r1)
+l3_@:
+      pop     r5, rsp
+ENDMACRO
+
+# --------------------------------------------------------------
+#
+# __mulu
+#
+# Multiply 2 16 bit numbers to yield a 32b result
+#
+# Entry:
+#       r1    16 bit multiplier (A)
+#       r2    16 bit multiplicand (B)
+#       r13   holds return address
+#       r14   is global stack pointer
+# Exit
+#       r3    upwards preserved
+#       r1,r2 holds 32b result (LSB in r1)
+#
+#
+#   A = |___r3___|____r1____|  (lsb)
+#   B = |___r2___|____0_____|  (lsb)
+#
+#   NB no need to actually use a zero word for LSW of B - just skip
+#   additions of A_L + B_L and use R2 in addition of A_H + B_H
+# --------------------------------------------------------------
+__mulu:
+        PUSH2   (r3, r4, rsp)
+                                    # Get B into [r2,-]
+        mov     r3, r0              # Get A into [r3,r1]
+        mov     r4, r0, -16         # Setup a loop counter
+        add     r0, r0              # Clear carry outside of loop - reentry from bottom will always have carry clear
+mulstep16:
+        ror     r3, r3              # Shift right A
+        ror     r1, r1
+        c.add   r3, r2              # Add [r2,-] + [r3,r1] if carry
+        inc     r4, 1               # increment counter
+        nz.mov  pc, r0, mulstep16   # next iteration if not zero
+        add     r0, r0              # final shift needs clear carry
+        ror     r3, r3
+        ror     r1, r1
+
+        POP2    (r3, r4, rsp)
+        mov     pc, rlink           # and return
+
+mul:
+	push rlink, rsp
+	pop r11, restk
+	pop r10, restk
+	; TODO: Adjust register use so we don't have to do all this manipulation, and
+	; we can potentially inline all the code instead of using a subroutine call
+	push r1, rsp
+	push r2, rsp
+	mov r1, r10
+	mov r2, r11
+	SW16A(__mulu)
+	mov r10, r1
+	pop r2, rsp
+	pop r1, rsp
 	push r10, restk
 	jsr rlink, r0, inc_ip
 	pop pc, rsp
@@ -776,7 +881,6 @@ load_plasma_word_split:
 	bswp r11, r11
 	mov pc, rlink
 
-mul:
 div:
 mod:
 cs:
@@ -787,7 +891,3 @@ ical:
 dlw:
 daw:
 	halt r0, r0, 0xffff
-
-
-; Start executing compiled PLASMA code here
-a1cmd:

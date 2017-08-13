@@ -1,13 +1,6 @@
 const addr = $4000
 def foo()
-    word a[10]
-    byte i
-    a[0] = 1
-    a[1] = 1
-    for i = 2 to 9
-	a[i] = a[i-2] + a[i-1]
-    next
-    return a[9] 
+    return 42
 end
-*addr = foo()
+*addr = foo() * -100
 done
