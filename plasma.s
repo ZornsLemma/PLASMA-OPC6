@@ -918,8 +918,51 @@ inc_ip:
 	add ripw, r0, 1
 	mov pc, rlink
 
+	; TODO: This needs to use a string pool, but let's keep it simple for now
+cs:
+	push rlink, rsp
+	jsr rlink, r0, inc_ip
+	jsr rlink, r0, get_bytecode_byte # r10 = length
+	sub rpp, r10
+	dec rpp, 1
+	push rpp, restk
+	mov r7, r10
+	mov r8, rpp
+	mov r11, r7
+	mov r10, r8
+	jsr rlink, r0, store_plasma_byte # store length
+	inc r8, 1
+csloop:
+	jsr rlink, r0, get_bytecode_byte # r10 = character
+	mov r11, r10
+	mov r10, r8
+	jsr rlink, r0, store_plasma_byte
+	inc r8, 1
+	dec r7, 1
+	nz.mov pc, r0, csloop
+	pop pc, rsp
+
 	; TODO: A lot of these subroutines are very free with their register use; this
 	; is done to aid debugging, later on it may be useful to compress them.
+
+	; Advance ripw/ripb by 1 byte and return with r10 containing the byte we just
+	; advanced past
+get_bytecode_byte:
+	mov ripb, ripb
+	z.mov pc, r0, get_byte_low
+	; ripb == 1
+	ld r10, ripw
+	bswp r10, r10
+	and r10, r0, 0x00ff
+	add ripw, r0, 1
+	mov ripb, r0
+	mov pc, rlink
+get_byte_low:
+	; ripb == 0
+	ld r10, ripw
+	and r10, r0, 0x00ff
+	mov ripb, r0, 1
+	mov pc, rlink
 
 	; ripw/ripb point at an opcode with a one-byte operand.
 	; Advance ripw/ripb by 2 bytes and return with r10 containing the byte operand.
@@ -1054,9 +1097,6 @@ load_plasma_word_split:
 	or r11, r9
 	bswp r11, r11
 	mov pc, rlink
-
-cs:
-	halt r0, r0, 0xffff
 
 	; TODO: ibrnch isn't implemented; the current compiler never generates it
 	; so probably best to defer implementation, as there's no way to meaningfully
