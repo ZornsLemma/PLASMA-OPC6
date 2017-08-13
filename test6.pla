@@ -1,15 +1,9 @@
 const addr = $4000
+const addr2 = $4002
+const addr3 = $4004
 word fp
-def bar()
-    return 42
+def bar()#3
+    return 42, 100, 1001
 end
-def foo()
-    word i
-    word j
-    i = bar()
-    i = i * 100
-    j = bar()
-    return i + j
-end
-*addr = foo()
+*addr3 = bar()
 done

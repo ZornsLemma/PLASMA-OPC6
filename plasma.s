@@ -728,6 +728,18 @@ lla:
 	push r10, restk
 	pop pc, rsp
 
+pushep:
+	push restk, rsp
+	push rlink, rsp
+	jsr rlink, r0, inc_ip
+	pop pc, rsp
+
+pullep:
+	pop restk, rsp
+	push rlink, rsp
+	jsr rlink, r0, inc_ip
+	pop pc, rsp
+
 	; TODO: Note that call's operand is an OPC word address, not a PLASMA data
 	; "address". I think this is fine, but will need to make sure this works OK
 	; once we suppport dynamic module loading.
@@ -1044,8 +1056,6 @@ load_plasma_word_split:
 	mov pc, rlink
 
 cs:
-pushep:
-pullep:
 	halt r0, r0, 0xffff
 
 	; TODO: ibrnch isn't implemented; the current compiler never generates it
