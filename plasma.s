@@ -629,6 +629,14 @@ dab:
 	jsr rlink, r0, store_plasma_byte
 	pop pc, rsp
 
+daw:
+	push rlink, rsp
+	jsr rlink, r0, get_word_operand
+	pop r11, restk
+	push r11, restk
+	jsr rlink, r0, store_plasma_word
+	pop pc, rsp
+
 sab:
 	push rlink, rsp
 	jsr rlink, r0, get_word_operand
@@ -713,10 +721,24 @@ lla:
 
 	; TODO: Note that call's operand is an OPC word address, not a PLASMA data
 	; "address". I think this is fine, but will need to make sure this works OK
-	; once we suport ICAL and function pointers.
+	; once we suppport dynamic module loading.
 call:
 	push rlink, rsp
 	jsr rlink, r0, get_word_operand
+	push ripw, rsp
+	push ripb, rsp
+	jsr rlink, r10
+	pop ripb, rsp
+	pop ripw, rsp
+	pop pc, rsp
+
+	; TODO: Note that ical stack operand is an OPC word address, not a PLASMA data
+	; "address". I think this is fine, but will need to make sure this works OK
+	; once we support dynamic module loading.
+ical:
+	push rlink, rsp
+	jsr rlink, r0, inc_ip
+	pop r10, restk
 	push ripw, rsp
 	push ripb, rsp
 	jsr rlink, r10
@@ -1015,8 +1037,11 @@ load_plasma_word_split:
 cs:
 pushep:
 pullep:
-ibrnch:
-ical:
 dlw:
-daw:
+	halt r0, r0, 0xffff
+
+	; TODO: ibrnch isn't implemented; the current compiler never generates it
+	; so probably best to defer implementation, as there's no way to meaningfully
+	; test it.
+ibrnch:
 	halt r0, r0, 0xffff

@@ -1,6 +1,8 @@
 const addr = $4000
+word fp
 def foo()
-    return 1010
+    return $1234
 end
-*addr = foo() % 3
+fp = @foo
+*addr = fp()
 done
