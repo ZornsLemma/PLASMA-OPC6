@@ -326,6 +326,7 @@ cffb:
 	push r10, restk
 	pop pc, rsp
 
+la:
 cw:
 	push rlink, rsp
 	; TODO: Might be better to use a macro to handle operand decoding but let's
@@ -720,7 +721,6 @@ div:
 mod:
 comp:
 idxw:
-la:
 lla:
 cs:
 pushep:

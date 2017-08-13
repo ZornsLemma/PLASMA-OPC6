@@ -1,6 +1,7 @@
 const addr = $4000
-def foo()
-    return $0
+word i = $1234
+def foo(p)
+    return *p
 end
-*addr = !foo() or $1234
+*addr = foo(@i)
 done
