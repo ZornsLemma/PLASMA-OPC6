@@ -1,7 +1,11 @@
 const addr = $4000
-word i = $1234
 def foo(p)
     return *p
 end
-*addr = foo(@i)
+def bar(i)
+    word j
+    j = $5678 + i
+    return foo(@j)
+end
+*addr = bar($1234)
 done

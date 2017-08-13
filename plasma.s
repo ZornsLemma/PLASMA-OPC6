@@ -415,6 +415,23 @@ llw:
 	push r11, restk
 	pop pc, rsp
 
+	; TODO: Although the word can *always* be at an odd address, this could benefit
+	; from the frame stack being word aligned
+slw:
+	push rlink, rsp
+	jsr rlink, r0, get_byte_operand
+	add r10, rifp
+	pop r11, restk
+	jsr rlink, r0, store_plasma_word
+	pop pc, rsp
+
+lla:
+	push rlink, rsp
+	jsr rlink, r0, get_byte_operand
+	add r10, rifp
+	push r10, restk
+	pop pc, rsp
+
 	; TODO: Note that call's operand is an OPC word address, not a PLASMA data
 	; "address". I think this is fine, but will need to make sure this works OK
 	; once we suport ICAL and function pointers.
@@ -721,7 +738,6 @@ div:
 mod:
 comp:
 idxw:
-lla:
 cs:
 pushep:
 pullep:
@@ -731,7 +747,6 @@ llb:
 dlb:
 dlw:
 slb:
-slw:
 daw:
 	halt r0, r0, 0xffff
 
