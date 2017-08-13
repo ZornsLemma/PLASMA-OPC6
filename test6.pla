@@ -1,6 +1,6 @@
 const addr = $4000
 def foo()
-    return 42
+    return 1010
 end
-*addr = foo() * -100
+*addr = foo() % 3
 done

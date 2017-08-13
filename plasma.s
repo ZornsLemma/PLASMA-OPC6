@@ -153,14 +153,42 @@ sub:
 	jsr rlink, r0, inc_ip
 	pop pc, rsp
 
+MACRO   PUSH( _data_, _ptr_)
+        push    _data_, _ptr_
+ENDMACRO
+
 MACRO   PUSH2( _d0_,_d1_, _ptr_)
         push     _d0_,_ptr_
         push     _d1_,_ptr_
 ENDMACRO
 
+MACRO   PUSH3( _d0_,_d1_,_d2_, _ptr_)
+        push     _d0_,_ptr_
+        push     _d1_,_ptr_
+        push     _d2_,_ptr_
+ENDMACRO
+
+MACRO   POP( _data_, _ptr_)
+        pop  _data_, _ptr_
+ENDMACRO
+
 MACRO   POP2( _d0_,_d1_, _ptr_)
         pop      _d1_, _ptr_
         pop      _d0_, _ptr_
+ENDMACRO
+
+MACRO   POP3( _d0_,_d1_,_d2_, _ptr_)
+        pop      _d2_, _ptr_
+        pop      _d1_, _ptr_
+        pop      _d0_, _ptr_
+ENDMACRO
+
+MACRO   ASL( _reg_)
+        add _reg_,_reg_
+ENDMACRO
+
+MACRO   ROL( _reg_)
+        adc _reg_,_reg_
 ENDMACRO
 
 MACRO   NEG( _reg_)
@@ -248,6 +276,109 @@ mul:
 	mov r1, r10
 	mov r2, r11
 	SW16A(__mulu)
+	mov r10, r1
+	pop r2, rsp
+	pop r1, rsp
+	push r10, restk
+	jsr rlink, r0, inc_ip
+	pop pc, rsp
+
+# --------------------------------------------------------------
+#
+# __modu
+#
+# Divide a 16 bit number by a 16 bit number to yield a 16 b quotient and
+# remainder
+#
+# Entry:
+# - r1 16 bit dividend (A)
+# - r2 16 bit divisor (B)
+# - r13 holds return address
+# - r14 is global stack pointer
+# Exit
+# - r3  upwards preserved
+# - r1 = remainder
+# - r2 = trashed
+# --------------------------------------------------------------
+
+__modu:
+    PUSH    (r13, r14)
+    jsr     r13, r0, divmod
+    mov     r1, r2
+    POP     (r13, r14)
+    mov     pc, r13
+
+# --------------------------------------------------------------
+#
+# __div
+#
+# Divide a 16 bit number by a 16 bit number to yield a 16 b quotient and
+# remainder
+#
+# Entry:
+# - r1 16 bit dividend (A)
+# - r2 16 bit divisor (B)
+# - r13 holds return address
+# - r14 is global stack pointer
+# Exit
+# - r3  upwards preserved
+# - r1 = quotient
+# - r2 = remainder
+# --------------------------------------------------------------
+
+__divu:
+
+divmod:
+        PUSH3   (r3, r4, r5, r14)
+
+        mov     r3, r2              # Get divisor into r3
+        mov     r2, r0              # Get dividend/quotient into double word r1,2
+        mov     r4, r0, udiv16_loop # Stash loop target in r4
+        mov     r5, r0, -16         # Setup a loop counter
+udiv16_loop:
+        ASL     (r1)                # shift left the quotient/dividend
+        ROL     (r2)                #
+        cmp     r2, r3              # check if quotient is larger than divisor
+        c.sub   r2, r3              # if yes then do the subtraction for real
+        c.adc   r1, r0              # ... set LSB of quotient using (new) carry
+        inc     r5, 1               # increment loop counter zeroing carry
+        nz.mov  pc, r4              # loop again if not finished (r5=udiv16_loop)
+
+        POP3    (r3, r4, r5, r14)
+        mov     pc,r13              # and return with quotient/remainder in r1/r2
+
+	; TODO: Check that div and mod have the same behaviour as the 6502 versions
+	; with negative values
+
+div:
+	push rlink, rsp
+	pop r11, restk
+	pop r10, restk
+	; TODO: Adjust register use so we don't have to do all this manipulation, and
+	; we can potentially inline all the code instead of using a subroutine call
+	push r1, rsp
+	push r2, rsp
+	mov r1, r10
+	mov r2, r11
+	SW16A(__divu)
+	mov r10, r1
+	pop r2, rsp
+	pop r1, rsp
+	push r10, restk
+	jsr rlink, r0, inc_ip
+	pop pc, rsp
+
+mod:
+	push rlink, rsp
+	pop r11, restk
+	pop r10, restk
+	; TODO: Adjust register use so we don't have to do all this manipulation, and
+	; we can potentially inline all the code instead of using a subroutine call
+	push r1, rsp
+	push r2, rsp
+	mov r1, r10
+	mov r2, r11
+	SW16A(__modu)
 	mov r10, r1
 	pop r2, rsp
 	pop r1, rsp
@@ -881,8 +1012,6 @@ load_plasma_word_split:
 	bswp r11, r11
 	mov pc, rlink
 
-div:
-mod:
 cs:
 pushep:
 pullep:
