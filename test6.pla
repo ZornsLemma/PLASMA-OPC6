@@ -1,9 +1,14 @@
 const addr = $4000
 def foo()
-    return 9 
+    return 1 
 end
 *addr = $5678
-if foo() <= 8 
-    *addr = $1234
-fin
+when foo()
+    is 4
+	*addr = $9999
+	break
+    is 8
+	*addr = $1234
+	break
+wend
 done

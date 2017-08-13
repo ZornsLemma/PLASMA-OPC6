@@ -502,6 +502,15 @@ brgt:
 	mi.mov pc, r0, branch_internal
 	mov pc, r0, nobranch_internal
 
+brne:
+	push rlink, rsp
+	pop r10, restk
+	pop r11, restk
+	push r11, restk
+	cmp r10, r11
+	nz.mov pc, r0, branch_internal
+	mov pc, r0, nobranch_internal
+
 brfls:
 	push rlink, rsp
 	pop r10, restk
@@ -691,7 +700,6 @@ cs:
 pushep:
 pullep:
 breq:
-brne:
 ibrnch:
 ical:
 llb:
