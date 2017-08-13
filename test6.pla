@@ -1,9 +1,15 @@
 const addr = $4000
 word fp
-asm foo()
-    mov r10, r0, 0xabcd
-    push r10, restk
-    mov pc, rlink
+def bar()
+    return 42
+end
+def foo()
+    word i
+    word j
+    i = bar()
+    i = i * 100
+    j = bar()
+    return i + j
 end
 *addr = foo()
 done

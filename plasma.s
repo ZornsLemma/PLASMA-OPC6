@@ -712,6 +712,15 @@ dlb:
 	jsr rlink, r0, store_plasma_byte
 	pop pc, rsp
 
+dlw:
+	push rlink, rsp
+	jsr rlink, r0, get_byte_operand
+	add r10, rifp
+	pop r11, restk
+	push r11, restk
+	jsr rlink, r0, store_plasma_word
+	pop pc, rsp
+
 lla:
 	push rlink, rsp
 	jsr rlink, r0, get_byte_operand
@@ -1037,7 +1046,6 @@ load_plasma_word_split:
 cs:
 pushep:
 pullep:
-dlw:
 	halt r0, r0, 0xffff
 
 	; TODO: ibrnch isn't implemented; the current compiler never generates it
