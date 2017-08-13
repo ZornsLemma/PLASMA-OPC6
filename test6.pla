@@ -1,6 +1,6 @@
 const addr = $4000
 def foo()
-    return $1234
+    return $0
 end
-*addr = $5678 | foo()
+*addr = !foo() or $1234
 done
