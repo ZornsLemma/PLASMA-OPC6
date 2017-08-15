@@ -1,0 +1,2080 @@
+// OK, this is a bit ugly... We (mis)use the C preprocessor to allow
+// this file to be conditionally compiled to build PLASMA ("PLAS32") and
+// PLAS128, based on whether PLAS128 is defined or not. plvmbb.s also
+// uses an ACME constant called PLAS128 to provide conditional assembly there.
+// Because this file contains inline ACME assembler which wants to be able to
+// say things like '!IFDEF PLAS128', it's important that PLAS128 is defined to
+// be 'PLAS128', so that the C preprocessor effectively leaves those !IFDEF
+// lines alone. We could simply make sure we define it to the appropriate value
+// in the makefile, but it seems safest and slightly cleaner (since it gives us
+// a place to write this comment) to enforce this here.
+#ifdef PLAS128
+    #undef PLAS128
+    #define PLAS128 PLAS128
+#endif
+
+include "inc/acornc.plh"
+
+// TODO: Weird - *SPOOL Z then *PLAS128 *immediately* closes the *SPOOL file.
+// *PLASMA doesn't exhibit this. Note that there's no need to load a module,
+// the startup banner and prompt don't make it into the spool file. Oh no,
+// this is a consequence of the current futzing around to try to make it
+// run on I/O processor when 2P is active. If that works out in the end,
+// this is probably acceptable. (However, possibly not. Does this cause
+// problems if a *EXEC-able !BOOT file wants to do something like:
+// *PLAS128
+// +MYPROG
+// If it does this might be unacceptable. Possibly it would be nice to allow
+// a command to be executed to be given as an argument to PLAS128 - then you
+// could do '*PLAS128 +MYPROG' - but even then losing the flexibility of the
+// *EXEC !BOOT option isn't ideal. I haven't tested to see if this does break
+// that case yet.)
+
+const MODADDR      = $1000
+
+// The following constants must be kept in sync with vmsrc/plvmzp.inc and
+// vmsrc/acornc.inc.
+
+// Note that we cannot rely on initialisation of non-constant globals; on
+// PLAS32 running on a second processor, the VM is re-entered on BREAK and
+// any globals will have their post-modification values, not the original
+// values.
+
+const inbuff       = $0700
+const errnum       = $0700
+const errstr	   = $0701
+const freemem      = $0006 	// 'SRC' zp, used to indicate heap start
+const ifp          = $0071
+#ifdef PLAS128
+    const pp           = $0073
+#endif
+const himemh       = $0078
+const scratch	   = $0079
+#ifdef PLAS128
+    const rambankcount = $0404
+#endif
+const errfp	   = $0405	// 2 bytes
+const errjb	   = $0407	// 2 bytes
+
+// TODO: I am currently very wasteful of memory in $400-$800; for
+// now we just allot this little part of it for the initial symbol
+// table, but this can probably be expanded later as the memory use
+// is tided up
+const initialsymtbl = $0409
+const initialsymtblsz = $50 // $150 // TODO $02f7
+const FALSE = 0
+const TRUE = NOT FALSE
+// TODO: allocheap_fail_threshold should probably be a non-constant
+// and be modifiable under program control (if so, modexec() should
+// probably reset it to a default on successful or unsuccessful
+// execution). While we're developing, we just stick with this.
+const allocheap_fail_threshold = $FFFF
+//
+// Module don't free memory
+//
+const modkeep     = $2000
+const modinitkeep = $4000
+//
+// Predefined functions.
+//
+predef putln, putc, puts, getc, gets
+predef syscall, call
+predef heapmark, heapalloc, xheapalloc, heapallocalign, heaprelease, availheap
+predef memset, memcpy
+predef isugt, isuge, isult, isule
+predef modload, modexec, modaddr
+predef setjmp, longjmp
+predef prbyte
+predef oserror(n, msg)#0
+predef call_oscli
+predef stocr
+predef mode
+predef callalloca
+//
+// System variables.
+//
+word version     = $0099 // 00.99
+// word systemflags = 0 TODO: delete this? commented out for now
+// TODO: I've experimentally moved heap to a fixed location in zero
+// page to support run-time detection of the parameter stack colliding
+// with the heap. May want to revert this, or make it conditionally
+// compiled.
+const heapptr = $0089
+#ifdef PLAS128
+    word xheapsize
+    // We leave $8000-$8008 inclusive free in each 16K sideways RAM bank
+    // to avoid the risk of the data accidentally looking like a valid
+    // sideways ROM header.
+    const xheap_bank_start = $09
+    word xheap = xheap_bank_start
+#endif
+#ifndef STANDALONE
+word symtbl
+word symtblchunk
+word lastsym
+byte perr
+//
+// String pool.
+// We don't strictly speaking need this, now that the CS opcode uses string
+// pooling in PLAS128 in a way which works even if there's a mode change
+// between two executions of the same CS opcode. However, not using this
+// manual string pool only saves 12 bytes in PLAS32 and it costs 5 bytes in
+// PLAS128, because we need a copy of the string in the binary and on the
+// parameter stack (the binary is in main RAM here, not in sideways
+// RAM), so we stick with it. TODO: We could in principle conditionally
+// compile this, but it's awfully fiddly.
+//
+byte verstr[]     = "PLASMA "
+byte freestr[]    = "MEM FREE:$"
+#ifdef PLAS128
+    byte xfreestr[]	  = ", AUX FREE:$"
+#endif
+byte errorstr[]   = "ERR:$"
+byte prompt[]     = "PLASMA"
+byte okstr[]      = "OK"
+byte huhstr[]     = "?\n"
+byte colonstr[]   = ": "
+#endif
+byte hexchar[]    = '0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F'
+//
+// Exported Machine ID. We somewhat arbitrarily assign the apparently free code
+// $C8 for all Acorn machines; once you know you're on an Acorn machine you can
+// use something like OSBYTE 0 to determine the exact model.
+//
+export byte machid       = $C8
+#ifndef STANDALONE
+//
+// Command line pointer
+//
+word cmdptr
+//
+// File handle used by modload (so we can close it if an error occurs)
+//
+byte modload_handle
+#endif
+//
+// Global variables for use by mode()
+//
+byte gm_new_himem_higher
+word gm_new_frame_start
+#ifdef PLAS128
+    word gm_new_ifp
+#endif
+word gm_copy_from
+word gm_copy_size
+byte gm_new_mode
+#ifndef STANDALONE
+//
+// Standard Library exported functions.
+//
+byte syslibstr[]  = "CMDSYS"
+byte machidstr[]  = "MACHID"
+// TODO: I should probably get rid of syscall - but maybe that would break "pseudo-portable" programs like my Rogue port - think about it
+byte sysstr       = "SYSCALL"
+byte putcstr[]    = "PUTC"
+byte putlnstr[]   = "PUTLN"
+byte putsstr[]    = "PUTS"
+byte getcstr[]    = "GETC"
+byte getsstr[]    = "GETS"
+byte callstr[]    = "CALL"
+byte hpmarkstr[]  = "HEAPMARK"
+byte hpalignstr[] = "HEAPALLOCALIGN"
+byte hpallocstr[] = "HEAPALLOC"
+byte xhpallocstr[]= "XHEAPALLOC"
+byte hprelstr[]   = "HEAPRELEASE"
+byte memsetstr[]  = "MEMSET"
+byte memcpystr[]  = "MEMCPY"
+byte uisgtstr[]   = "ISUGT"
+byte uisgestr[]   = "ISUGE"
+byte uisltstr[]   = "ISULT"
+byte uislestr[]   = "ISULE"
+byte loadstr[]    = "MODLOAD"
+byte execstr[]    = "MODEXEC"
+byte modadrstr[]  = "MODADDR"
+// TODO: ARGS is currently not used by any of the Apple examples (they seem to
+// assume the command line is at $01FF). I think I can see how this is meant to
+// work and I could probably support it, but for the moment let's at least
+// avoid exporting this when it may not work and it's just wasting space in the
+// VM.
+// byte argstr[]     = "ARGS"
+// TODO: Apple II code now has AUTORUN, do we want that?
+byte setjmpstr[]  = "SETJMP"
+byte longjmpstr[] = "LONGJMP"
+byte prbytestr[]  = "PRBYTE"
+byte oserrorstr[] = "OSERROR"
+byte call_osclistr[] = "CALL_OSCLI"
+byte stocrstr[]   = "STOCR"
+byte modestr[]    = "MODE"
+byte callallocastr[] = "CALLALLOCA"
+word exports[]	  = @callstr,   @call
+word		  = @sysstr,    @syscall
+word 		  = @putcstr,   @putc
+word              = @putlnstr,  @putln
+word		  = @putsstr,   @puts
+word		  = @getcstr,   @getc
+word		  = @getsstr,   @gets
+word		  = @hpmarkstr, @heapmark
+word		  = @hpallocstr,@heapalloc
+word		  = @xhpallocstr,@xheapalloc
+word		  = @hpalignstr,@heapallocalign
+word		  = @hprelstr,  @heaprelease
+word		  = @memsetstr, @memset
+word		  = @memcpystr, @memcpy
+word              = @uisgtstr,  @isugt
+word              = @uisgestr,  @isuge
+word              = @uisltstr,  @isult
+word              = @uislestr,  @isule
+word              = @loadstr,   @modload
+word              = @execstr,   @modexec
+word              = @modadrstr, @modaddr
+word              = @machidstr, @machid
+// TODO: Commented out - see comment on argstr
+//word              = @argstr,    @cmdptr
+word		  = @setjmpstr, @setjmp
+word		  = @longjmpstr,@longjmp
+word		  = @prbytestr, @prbyte
+word		  = @oserrorstr,@oserror
+word		  = @call_osclistr, @call_oscli
+word		  = @stocrstr,  @stocr
+word		  = @modestr,   @mode
+word		  = @callallocastr, @callalloca
+word              = 0
+word syslibsym
+#endif
+//
+// CALL 6502 ROUTINE
+// CALL(ADDR, AREG, XREG, YREG, STATUS)
+//
+export asm call
+REGVALS =   SRC
+        PHP
+        LDA     ESTKL+4,X
+        STA     TMPL
+        LDA     ESTKH+4,X
+        STA     TMPH
+        LDA     ESTKL,X
+        PHA
+        LDA     ESTKL+1,X
+        TAY
+        LDA     ESTKL+3,X
+        PHA
+        LDA     ESTKL+2,X
+        INX
+        INX
+        INX
+    INX
+        STX     ESP
+        TAX
+        PLA
+        PLP
+        JSR     JMPTMP
+        PHP
+        STA     REGVALS+0
+        STX     REGVALS+1
+        STY     REGVALS+2
+        PLA
+        STA     REGVALS+3
+        LDX     ESP
+        LDA     #<REGVALS
+        LDY     #>REGVALS
+        STA     ESTKL,X
+        STY     ESTKH,X
+        PLP
+        RTS
+end
+//
+// SET MEMORY TO VALUE
+// MEMSET(ADDR, VALUE, SIZE)
+//   With optimizations from Peter Ferrie
+//
+export asm memset
+	LDA     ESTKL+2,X
+	STA     DSTL
+	LDA     ESTKH+2,X
+	STA     DSTH
+	LDY     ESTKL,X
+	BEQ     +
+	INC     ESTKH,X
+	LDY     #$00
++	LDA     ESTKH,X
+	BEQ     SETMEX
+SETMLPL	CLC
+	LDA     ESTKL+1,X
+SETMLPH	STA     (DST),Y
+	DEC     ESTKL,X
+	BEQ     ++
+-	INY
+	BEQ     +
+--	BCS     SETMLPL
+	SEC
+	LDA     ESTKH+1,X
+	BCS     SETMLPH
++	INC     DSTH
+	BNE     --
+++	DEC     ESTKH,X
+	BNE     -
+SETMEX	INX
+	INX
+	RTS
+end
+//
+// COPY MEMORY
+// MEMCPY(DSTADDR, SRCADDR, SIZE)
+//
+export asm memcpy
+	INX
+	INX
+MEMCPYINT
+	LDA	ESTKL-2,X
+	ORA	ESTKH-2,X
+	BEQ	CPYMEX
+	LDA	ESTKL-1,X
+	CMP	ESTKL,X
+	LDA	ESTKH-1,X
+	SBC	ESTKH,X
+ 	BCC	REVCPY
+;
+; FORWARD COPY
+;
+	LDA	ESTKL,X
+	STA 	DSTL
+	LDA	ESTKH,X
+	STA 	DSTH
+	LDA	ESTKL-1,X
+	STA 	SRCL
+	LDA	ESTKH-1,X
+	STA 	SRCH
+	LDY	ESTKL-2,X
+	BEQ	FORCPYLP
+	INC 	ESTKH-2,X
+	LDY	#$00
+FORCPYLP LDA	(SRC),Y
+	STA	(DST),Y
+	INY
+	BNE	+
+	INC	DSTH
+	INC	SRCH
++	DEC 	ESTKL-2,X
+	BNE	FORCPYLP
+	DEC	ESTKH-2,X
+	BNE	FORCPYLP
+	RTS
+;
+; REVERSE COPY
+;
+REVCPY	;CLC
+	LDA 	ESTKL-2,X
+	ADC	ESTKL,X
+	STA	DSTL
+	LDA	ESTKH-2,X
+	ADC	ESTKH,X
+	STA	DSTH
+	CLC
+	LDA 	ESTKL-2,X
+	ADC	ESTKL-1,X
+	STA	SRCL
+	LDA	ESTKH-2,X
+	ADC	ESTKH-1,X
+	STA	SRCH
+	DEC	DSTH
+	DEC	SRCH
+	LDY	#$FF
+	LDA 	ESTKL-2,X
+	BEQ	REVCPYLP
+	INC 	ESTKH-2,X
+REVCPYLP LDA	(SRC),Y
+	STA	(DST),Y
+	DEY
+	CPY	#$FF
+	BNE	+
+	DEC	DSTH
+	DEC	SRCH
++	DEC 	ESTKL-2,X
+	BNE	REVCPYLP
+	DEC	ESTKH-2,X
+	BNE	REVCPYLP
+CPYMEX	RTS
+end
+//
+// Unsigned word comparisons.
+//
+export asm isuge
+	LDA	ESTKL+1,X
+	CMP	ESTKL,X
+	LDA	ESTKH+1,X
+	SBC	ESTKH,X
+	LDA	#$FF
+	ADC	#$00
+	EOR	#$FF
+ 	STA	ESTKL+1,X
+	STA	ESTKH+1,X
+	INX
+	RTS
+end
+export asm isule
+	LDA	ESTKL,X
+	CMP	ESTKL+1,X
+	LDA	ESTKH,X
+	SBC	ESTKH+1,X
+	LDA	#$FF
+	ADC	#$00
+	EOR	#$FF
+ 	STA	ESTKL+1,X
+	STA	ESTKH+1,X
+	INX
+	RTS
+end
+export asm isugt
+	LDA	ESTKL,X
+	CMP	ESTKL+1,X
+	LDA	ESTKH,X
+	SBC	ESTKH+1,X
+	LDA	#$FF
+	ADC	#$00
+ 	STA	ESTKL+1,X
+	STA	ESTKH+1,X
+	INX
+	RTS
+end
+export asm isult
+	LDA	ESTKL+1,X
+	CMP	ESTKL,X
+	LDA	ESTKH+1,X
+	SBC	ESTKH,X
+	LDA	#$FF
+	ADC	#$00
+ 	STA	ESTKL+1,X
+	STA	ESTKH+1,X
+	INX
+	RTS
+end
+#ifndef STANDALONE
+//
+// Addresses of internal routines.
+//
+asm interp
+	DEX
+	LDA	#<IINTERP
+	STA	ESTKL,X
+	LDA	#>IINTERP
+	STA	ESTKH,X
+	RTS
+end
+// 
+// A DCI string is one that has the high bit set for every character except the last.
+// More efficient than C or Pascal strings.
+//
+//def dcitos(dci, str)
+//    byte len, c
+//    len = 0
+//    repeat
+//        c = (dci).[len]
+//        len = len + 1
+//        (str).[len] = c & $7F
+//    until !(c & $80)
+//    ^str = len
+//    return len
+//end
+asm dcitos
+	LDA	ESTKL,X
+	STA	DSTL
+	LDA	ESTKH,X
+	STA	DSTH
+	LDA	ESTKL+1,X
+	STA	SRCL
+	LDA	ESTKH+1,X
+	STA	SRCH
+	LDY	#$00
+-	LDA	(SRC),Y
+	CMP	#$80
+	AND	#$7F
+	INY
+	STA	(DST),Y
+	BCS	-
+	TYA
+	LDY	#$00
+	STA	(DST),Y
+	INX
+	STA	ESTKL,X
+	STY	ESTKH,X
+	RTS
+end
+//def stodci(str, dci)
+//    byte len, c
+//    len = ^str
+//    if len == 0
+//        return 0
+//    fin
+//    c = toupper((str).[len]) & $7F
+//    len = len - 1
+//    (dci).[len] = c
+//    while len
+//    	c = toupper((str).[len]) | $80
+//    	len = len - 1
+//    	(dci).[len] = c
+//    loop
+//    return ^str
+//end
+asm stodci
+	LDA	ESTKL,X
+	STA	DSTL
+	LDA	ESTKH,X
+	STA	DSTH
+	LDA	ESTKL+1,X
+	STA	SRCL
+	LDA	ESTKH+1,X
+	STA	SRCH
+	INX
+	LDY	#$00
+	LDA	(SRC),Y
+	BEQ	++
+	TAY
+	LDA	(SRC),Y
+	JSR	TOUPR
+	BNE	+
+-	LDA	(SRC),Y
+	JSR	TOUPR
+	ORA	#$80
++	DEY
+	STA	(DST),Y
+	BNE	-
+	LDA	(SRC),Y
+++	STA	ESTKL,X
+	STY	ESTKH,X
+	RTS
+end
+asm toupper
+	LDA     ESTKL,X
+TOUPR	AND     #$7F
+	CMP     #'a'
+	BCC     +
+	CMP     #'z'+1
+	BCS     +
+	SBC     #$1F
++	STA     ESTKL,X
+	RTS
+end
+// Convert a DCI string to an Acorn OS-style string terminated by CR
+// int dcitocr(dci, cr) - returns length (of DCI string/excluding CR)
+asm dcitocr
+	; TODO: This little code fragment to set up SRC/DST is used in
+	; a few places and could possibly be factored out; as long as
+	; we continue to assemble this file directly into the VM
+	; executable, we can safely use JSR (unlike a normal module).
+	LDA	ESTKL,X
+	STA	DSTL
+	LDA	ESTKH,X
+	STA	DSTH
+	LDA	ESTKL+1,X
+	STA	SRCL
+	LDA	ESTKH+1,X
+	STA	SRCH
+	INX
+	LDY	#0
+	STY	ESTKH,X
+-	LDA	(SRC),Y
+	CMP	#$80		; set C iff >= $80
+	AND	#$7F
+	STA	(DST),Y
+	INY
+	BCS	-
+	LDA	#$0D
+	STA	(DST),Y
+	STY	ESTKL,X
+	RTS
+end
+#endif
+// Converts a PLASMA string to an Acorn OS-style string terminated by CR
+// void stocr(str, cr)
+export asm stocr
+	LDA	ESTKL,X
+	STA	DSTL
+	LDA	ESTKH,X
+	STA	DSTH
+	LDA	ESTKL+1,X
+	STA	SRCL
+	LDA	ESTKH+1,X
+	STA	SRCH
+	INX
+	STX	ESP
+	LDY	#0
+	LDA	(SRC),Y
+	BEQ	+
+	TAX
+-	INY
+	LDA	(SRC),Y
+	DEY
+	STA	(DST),Y
+	INY
+	DEX
+	BNE	-
++	LDA	#$0D
+	STA	(DST),Y
+	LDX	ESP
+	RTS
+end
+
+#ifndef STANDALONE
+//
+// Module symbols are entered into the symbol table
+// pre-pended with a '#' to differentiate them
+// from normal symbols.
+//
+//def modtosym(mod, dci)
+//    byte len, c
+//    (dci).0 = '#'|$80
+//    len = 0
+//    repeat
+//        c = (mod).[len]
+//        len = len + 1
+//        (dci).[len] = c
+//    until !(c & $80)
+//    return dci
+//end
+asm modtosym
+	LDA	ESTKL+1,X
+	STA	SRCL
+	LDA	ESTKH+1,X
+	STA	SRCH
+	LDA	ESTKL,X
+	STA	ESTKL+1,X
+	STA	DSTL
+	LDA	ESTKH,X
+	STA	ESTKH+1,X
+	STA	DSTH
+	INX
+	LDY	#$00
+	LDA	#'#'+$80
+-	STA	(DST),Y
+	ASL
+	LDA	(SRC),Y
+	INY
+	BCS	-
+	RTS
+end
+//
+// Lookup routines.
+//
+asm lookuptbl
+	LDA	ESTKL,X
+	STA	DSTL
+	LDA	ESTKH,X
+	STA	DSTH
+	LDA	ESTKL+1,X
+	STA	SRCL
+	LDA	ESTKH+1,X
+	STA	SRCH
+.NEXT	LDY	#$00
+.NEXTY	LDA	(DST),Y
+	BEQ	.CHUNKEND
+	CMP	(SRC),Y
+	BNE	.NOTMATCH
+	INY
+	ASL
+	BCS	.NEXTY
+	LDA	(DST),Y
+	PHA
+	INY
+	LDA	(DST),Y
+	TAY
+	PLA
+.EXIT	INX
+	STA	ESTKL,X
+	STY	ESTKH,X
+	RTS
+.NOTMATCH
+	LDY	#$00
+.SKIP	LDA	(DST),Y
+	INC	DSTL
+	BEQ	.DSTCARRY
+.DSTCARRYDONE
+	ASL
+	BCS	.SKIP
+	LDA	#$02
+	ADC	DSTL
+	STA	DSTL
+	BCC	.NEXTY
+	INC	DSTH
+	BCS	.NEXTY
+.DSTCARRY
+	INC	DSTH
+	BNE	.DSTCARRYDONE
+.CHUNKEND 
+	LDY	#$02
+	LDA	(DST),Y
+	BNE	.NEXTCHUNK
+	TAY
+	BEQ	.EXIT
+.NEXTCHUNK
+	PHA
+	DEY
+	LDA	(DST),Y
+	STA	DSTL
+	PLA
+	STA	DSTH
+	BNE	.NEXT
+end
+#endif
+
+//
+// Large frame allocation API
+// 
+// This is effectively a varargs function; given a function foo:
+// 	def foo(a, b, c)
+// if you execute:
+//	x = callalloca(5, 25, @foo, 512)
+// it behaves 'as if' you wrote:
+//	byte tmp[512]
+//	x = foo(5, 25, @tmp)
+// and then 'tmp' is immediately freed on exit from foo().
+// This is useful because "normal" local variables are restricted to a total
+// of 256 bytes per function.
+export asm callalloca(fn, size)
+	LDA	ESTKL+1,X
+	STA	TMPL
+	LDA	ESTKH+1,X
+	STA	TMPH
+
+	SEC
+!IFNDEF PLAS128 {
+	LDA	IFPL
+	PHA
+	SBC	ESTKL,X
+	STA	IFPL
+	STA	ESTKL+1,X
+	LDA	IFPH
+	PHA
+	SBC	ESTKH,X
+	STA	IFPH
+	STA	ESTKH+1,X
+	+CHECKVSHEAP IFP
+}
+!IFDEF PLAS128 {
+	LDA	PPL
+	PHA
+	SBC	ESTKL,X
+	STA	PPL
+	STA	ESTKL+1,X
+	LDA	PPH
+	PHA
+	SBC	ESTKH,X
+	STA	PPH
+	STA	ESTKH+1,X
+	+CHECKVSHEAP PP
+	; We don't need to update IFP; if the called function uses the frame
+	; stack, ENTER will set IFP=PP-frame_size.
+}
+	INX
+
+	; TODO: Can we re-use the JMPTMP label in plvmbb.s?
+	JSR	+
+
+!IFNDEF PLAS128 {
+	PLA
+	STA	IFPH
+	PLA
+	STA	IFPL
+}
+!IFDEF PLAS128 {
+	PLA
+	STA	PPH
+	PLA
+	STA	PPL
+}
+
+	RTS
+
++	JMP	(TMP)
+end
+
+//
+// ACORN OS ERROR GENERATION
+//
+export asm oserror(n, msg)#0
+	LDA	ESTKL+1,X
+	STA	$101
+	LDA	ESTKL,X
+	STA	TMPL
+	LDA	ESTKH,X
+	STA	TMPH
+	LDY	#0
+	LDA	(TMP),Y
+	TAY
+	LDA	#0
+	STA	$100 ; BRK opcode
+	STA	$102,Y
+-	LDA	(TMP),Y
+	STA	$101,Y
+	DEY
+	BNE	-
+	JMP	$100
+end
+
+//
+// NONLOCAL GOTO
+//
+
+// setjmp(jmp_buf *b) -> 0 on save, longjmp val otherwise
+export asm setjmp
+	STX	ESP
+
+	LDY	#0
+	LDA	ESTKL,X
+	STA	TMPL
+	STY	ESTKL,X
+	LDA	ESTKH,X
+	STA	TMPH
+	STY	ESTKH,X
+
+	TXA
+	STA	(TMP),Y
+	INY
+
+	; Note that we know there's at least one element on ESTK as
+	; we received our 'b' argument on it. We could avoid saving
+	; that but it seems simplest just to include it.
+----	LDA	ESTKL,X
+	STA	(TMP),Y
+	INY
+	LDA	ESTKH,X
+	STA	(TMP),Y
+	INY
+	INX
+    	CPX	#ESTKSZ/2
+	BNE	----
+
+	;* We store IFP and PP as a delta from HIMEM to avoid problems
+	;* where we do setjmp(); mode(); longjmp().
++++	SEC
+	LDA	#0
+	SBC	IFPL
+	STA	(TMP),Y
+	INY
+	LDA	HIMEMH
+	SBC	IFPH
+	STA	(TMP),Y
+	INY
+#ifdef PLAS128
+	SEC
+	LDA	#0
+	SBC	PPL
+	STA	(TMP),Y
+	INY
+	LDA	HIMEMH
+	SBC	PPH
+	STA	(TMP),Y
+	INY
+#endif
+
+	TYA
+	CLC
+	ADC	TMPL
+	STA	TMPL
+	BCC	+
+	INC	TMPH
++	LDY	#0
+
+	TSX
+	TXA
+	STA	(TMP),Y
+	; We must start this loop with Y=0 so we have the ability to store a
+	; full 256 bytes of stack without wrapping Y; this will never happen
+	; in practice, but still... So we need to bump TMP past the stack
+	; pointer just saved instead of incrementing Y. TODO: Hmm, I am not
+	; sure if that's true - ignoring the unreality of the stack being
+	; totally full, in that case SP(=X) would have wrapped round to 255
+	; and this loop would exit on the first pass.
+	INC	TMPL
+	BNE	++++
+	INC	TMPH
+++++ 	
+--	INX
+	BEQ	++
+	LDA	$0100,X
+	STA	(TMP),Y
+	INY
+	JMP	--
+
+++	LDX	ESP
+	RTS
+end
+
+// longjmp(jmp_buf *b, word val)
+export asm longjmp
+	LDA	ESTKL+1,X
+	STA	TMPL
+	LDA	ESTKH+1,X
+	STA	TMPH
+	LDA	ESTKL,X
+	PHA
+	LDA	ESTKH,X
+	PHA
+
+	LDY	#0
+	LDA	(TMP),Y
+	STA	ESP
+	PHA
+	TAX
+	INY
+-	LDA	(TMP),Y
+	STA	ESTKL,X
+	INY
+	LDA	(TMP),Y
+	STA	ESTKH,X
+	INY
+	INX
+	CPX 	#ESTKSZ/2
+	BNE	-
+	PLA
+	TAX
+
+	PLA
+	STA	ESTKH,X
+	PLA
+	STA	ESTKL,X
+	;* if val is 0, force it to be 1
+	ORA	ESTKH,X
+	BNE	++++
+	INC	ESTKL,X
+++++
+
+ 	SEC
+	LDA	#0
+	SBC	(TMP),Y
+	STA	IFPL
+	INY
+	LDA	HIMEMH
+	SBC	(TMP),Y
+	STA	IFPH
+	INY
+#ifdef PLAS128
+	SEC
+	LDA	#0
+	SBC	(TMP),Y
+	STA	PPL
+	INY
+	LDA	HIMEMH
+	SBC	(TMP),Y
+	STA	PPH
+	INY
+#endif
+
+	;* We don't need to save IP, IPY or (for PLAS128) the current bank at 
+	;* $F4; CALL/ICALL save and restore these themselves. (Remember that
+	;* when longjmp() reaches its RTS, control returns to just after the
+	;* JSR inside the CALL/ICALL which called setjmp.)
+	;* TODO: Move this comment into setjmp(), as it talks about saving?
+
+	TYA
+	CLC
+	ADC	TMPL
+	STA	TMPL
+	BCC	++
+	INC	TMPH
+++	LDY	#0
+
+	LDA	(TMP),Y
+	TAX
+	TXS
+	INC	TMPL
+	BNE	+++++
+	INC	TMPH
++++++
+
+--	INX
+	BEQ	+++
+	LDA	(TMP),Y
+	STA	$0100,X
+	INY
+	JMP	--
+
++++	
+
+	;* PLAS128: CS may have allocated some constant strings after setjmp()
+	;* was called, but when we restore the value of PP saved by setjmp()
+	;* we effectively just reset the pool back to the state at the setjmp()
+	;* point.
+
+	LDX	ESP
+	RTS
+end
+
+#ifdef PLAS128
+//
+// COPY FROM MAIN MEM TO AUX MEM.
+//
+// MEMXCPY(DST, SRC, SIZE)
+//
+// Assumes that DST to DST+SIZE-1 all lie in the same 16K bank; this will
+// be true given how allocxheap() works.
+asm memxcpy
+	LDA	ESTKH,X
+	ORA	ESTKL,X
+	BEQ	MEMXCPYEX
+
+	STY 	IPY
+
+	;* This code must be kept consistent with IINTERP
+	LDA	ESTKH+2,X
+	ASL
+	ADC	#$00
+	ASL
+	ADC	#$00
+	AND	#$03
+	TAY
+	LDA	RAMBANK,Y
+	STA	$F4
+	STA	$FE30
+
+	LDA	ESTKH+2,X
+	AND	#$BF
+	ORA	#$80
+	STA 	DSTH
+	LDA	ESTKL+2,X
+	STA	DSTL
+
+	LDA	ESTKL+1,X
+	STA	SRCL
+	LDA	ESTKH+1,X
+	STA	SRCH
+	
+	LDY	ESTKL,X
+	BEQ	MEMXCPYLP
+	INC 	ESTKH,X
+	LDY	#$00
+MEMXCPYLP 
+	LDA	(SRC),Y
+	STA	(DST),Y
+	INY
+	BNE	+
+	INC	DSTH
+	INC	SRCH
++	DEC 	ESTKL,X
+	BNE	MEMXCPYLP
+	DEC	ESTKH,X
+	BNE	MEMXCPYLP
+
+	LDY	IPY
+MEMXCPYEX
+	INX
+	INX
+	RTS
+end
+#endif
+
+//
+// CONSOLE I/O
+//
+export asm putln
+	;* We must return a value; we just return junk.
+	DEX
+
+	JMP	OSNEWL
+end
+export asm putc
+	LDA	ESTKL,X
+	JMP	OSWRCH
+end
+export asm getc
+	DEX
+	JSR	OSRDCH
+	STA	ESTKL,X
+	LDA	#$00
+	STA	ESTKH,X
+	RTS
+end
+export asm gets
+	STX	ESP
+	LDA	ESTKL,X
+	JSR	OSWRCH
+	LDA	#<INBUFF
+	STA	ESTKL,X
+	LDA	#>INBUFF
+	STA	ESTKH,X
+
+	LDA	#<SCRATCH
+	STA	TMPL
+	LDA	#>SCRATCH
+	STA	TMPH
+	LDA	#<(INBUFF+1)
+	LDY	#0
+	STA	(TMP),Y
+	LDA	#>(INBUFF+1)
+	INY
+	STA	(TMP),Y
+	LDA	#(INBUFFSZ-1)
+	INY
+	STA	(TMP),Y
+	LDA	#32
+	INY
+	STA	(TMP),Y
+	LDA	#255
+	INY
+	STA	(TMP),Y
+
+	LDA	#0
+	LDX	TMPL
+	LDY	TMPH
+	JSR	OSWORD
+	BCC	not_escape
+	LDA	#osbyte_acknowledge_escape
+	JSR	OSBYTE
+	BRK
+	!BYTE	17
+	!TEXT	"Escape"
+	BRK
+not_escape
+	STY	INBUFF
+
+	LDX	ESP
+	RTS
+end
+// def puts(str)
+export asm puts
+	STX	ESP
+	LDA	ESTKL,X
+	STA	TMPL
+	LDA	ESTKH,X
+	STA	TMPH
+	LDY	#0
+	LDA	(TMP),Y
+	BEQ	+
+	TAX
+-	INY
+	LDA	(TMP),Y
+	JSR	OSASCI
+	DEX
+	BNE	- 
++	LDX	ESP
+	RTS
+end
+export def syscall(cmd, params)
+    // Just a dummy implementation
+    oserror(0, "syscall")
+end
+export def prbyte(v)
+    putc(hexchar[(v >> 4) & $0F])
+    return putc(hexchar[v & $0F])
+end
+#ifndef STANDALONE
+def prword(v)
+    prbyte(v >> 8)
+    return prbyte(v)
+end
+#endif
+
+// TODO: export this?
+// dword jmpbufsz(const jmp_buf *jb) - returns actual size of *jb
+def jmpbufsz(jb)
+	const esp_size = 1
+	const esp_offset = 0
+#ifdef PLAS128
+	const pp_size = 2
+#else
+	const pp_size = 0
+#endif
+	const ifp_size = 2
+	const stack_ptr_size = 1
+	const estksz = 32
+	const estksz_elems = estksz / 2
+	word size
+	word stack_ptr
+	size = esp_size + 2 * (estksz_elems - jb->esp_offset) + ifp_size + pp_size
+	stack_ptr = ^(jb + size)
+	size = size + stack_ptr_size + (255 - stack_ptr)
+	// putc('E'); prword(size) // TODO TEMP
+	return size
+end
+
+// Change the screen mode
+//
+// Care must be taken when calling mode(). The parameter stack starts at the
+// bottom of screen memory (HIMEM) and grows downwards. If a mode change
+// alters HIMEM, the parameter stack needs to be relocated in memory. mode()
+// takes care of this, but any code which has taken the address of local
+// variables on the parameter stack (or, on PLAS128, constant strings, which
+// also live on the parameter stack) will have an invalid address after
+// the relocation. (This isn't an issue if changing between modes which doesn't
+// alter HIMEM.)
+//
+// TL;DR: Call mode() as early as possible and with as few nested function
+// calls in effect as possible and you'll probably be safe.
+//
+// Returns TRUE if the mode change was successful and FALSE if not (typically
+// caused by insufficient memory).
+export def mode(n)
+    word new_himemh, himem, new_himem
+    byte s, frame_size
+    word call_jsr_return, ical_jsr_return, possible_jsr_return
+    word working_ifp, working_pp
+
+    // If the mode change doesn't alter HIMEM, it's trivial. We need to check
+    // specifically for the second processor case here; see the code just
+    // above INITFP.
+    new_himemh = call(osbyte, osbyte_read_himem_for_mode, n, 0, 0).2
+    if new_himemh == ^himemh or ^himemh > $80
+	putc(22)
+	putc(n)
+	return TRUE
+    fin
+
+    himem = ^himemh << 8
+    new_himem = new_himemh << 8
+#ifdef PLAS128
+    gm_new_frame_start = *pp + (new_himem - himem)
+    // Because we use gm_new_frame_start below, it's important that PP doesn't
+    // move between now and then - which means none of the following code can
+    // use constant strings. (We could redo this calculation at that point, but
+    // it's nicer not to have to.)
+#else
+    gm_new_frame_start = *ifp + (new_himem - himem)
+#endif
+    // Insist on 512 bytes free afterwards, so that an application has a
+    // chance to not crash after a mode change when memory is tight.
+    if isult(gm_new_frame_start - 512, *heapptr)
+	return FALSE
+    fin
+
+    ^himemh = new_himemh
+
+    // We're now going to copy the parameter frame stack and adjust IFP (and
+    // PP for PLAS128) accordingly. We need a temporary parameter frame
+    // stack so we can call memcpy(); once we've switched to that we can't
+    // access any local variables, so we copy everything into globals first.
+    gm_new_himem_higher = isuge(new_himem, himem)
+#ifdef PLAS128
+    gm_new_ifp = *ifp + (new_himem - himem)
+    gm_copy_from = *pp
+#else
+    gm_copy_from = *ifp
+#endif
+    gm_copy_size = himem - gm_copy_from
+    gm_new_mode = n
+    *ifp = *heapptr + 256 // we know there's at least 512 bytes available
+
+    if gm_new_himem_higher
+	putc(22)
+	putc(gm_new_mode)
+    fin
+    memcpy(gm_new_frame_start, gm_copy_from, gm_copy_size)
+    if not gm_new_himem_higher
+	putc(22)
+	putc(gm_new_mode)
+    fin
+#ifdef PLAS128
+    *pp = gm_new_frame_start
+    *ifp = gm_new_ifp
+#else
+    *ifp = gm_new_frame_start
+#endif
+// TODO TEMP!
+    if call(osbyte, osbyte_read_himem, 0, 0, 0).2 <> ^himemh
+    	puts("foo")
+    	oserror(255,"foo")
+    fin	
+    return TRUE
+end
+
+//
+// FILE I/O
+//
+#ifndef STANDALONE
+def high_order_address
+    return call(osbyte, osbyte_read_high_order_address, 0, 0, 0):1
+end
+def readfile(filename, buffer)
+    byte block[osfile_block_size]
+    block:0 = filename
+    block:2 = buffer
+    block:4 = high_order_address()
+    block:6 = 0 // ignore file's load address, use our own
+    perr = (call(osfile, osfile_load_file, @block, @block >> 8, 0).0 == 0)
+    return perr
+end
+//
+// Heap routines.
+//
+def availheap
+    byte fp
+    return @fp - *heapptr
+end
+#endif
+def heapfull()
+    puts("heapalloc failed\n") // TODO TEMP
+    oserror(0, "Heap full")
+end
+// heapalloc() generates an OS error if the allocation fails and is
+// no larger than allocheap_fail_threshold; failures otherwise return
+// 0. The idea here is that as well as allowing "always" and "never"
+// generating an OS error, a program may take more care to check big
+// allocations (e.g. loading a file containing user data) than it will
+// do with small allocations (where it might not be able to do much
+// except die even if it checks and notices that they failed).
+export def heapalloc(size)
+    word addr
+    addr = *heapptr
+    *heapptr = *heapptr + size
+    // TODO: Perhaps a little bit pedantic, but it would be good here (and
+    // possibly in other heap allocation functions) to detect *heapptr 
+    // wrapping round at the top of memory.
+    if isuge(*heapptr, @addr)
+	*heapptr = addr
+	if isule(size, allocheap_fail_threshold)
+	    heapfull()
+	fin
+	return 0
+    fin
+    return addr
+end
+// Like heapalloc(), but *always* generates an error if the allocation
+// fails, regardless of the size requested and the fail threshold.
+export def xheapalloc(size)
+    word addr
+    addr = heapalloc(size)
+    if addr == 0
+	heapfull()
+    fin
+    return addr
+end
+export def heapallocalign(size, pow2, freeaddr)
+    word align, addr
+    if freeaddr
+        *freeaddr = *heapptr
+    fin
+    align = (1 << pow2) - 1
+    addr = (*heapptr | align) + 1
+    *heapptr = addr + size
+    if isuge(*heapptr, @addr)
+        // TODO: Does this need to reset *heapptr?
+        return 0
+    fin
+    return addr
+end
+export def heapmark
+    return *heapptr
+end
+export def heaprelease(newheap)
+    *heapptr = newheap
+    return @newheap - *heapptr
+end
+#ifdef PLAS128
+def allocxheap(size)
+    word xaddr, start_bank, end_bank
+    if isugt(size, 16*1024-xheap_bank_start)
+	return 0
+    fin
+    repeat
+	xaddr = xheap
+	xheap = xheap + size
+	start_bank = xaddr & $C000
+	end_bank = (xheap - 1) & $C000
+	if start_bank <> end_bank
+	    xheap = (xheap & $C000) | xheap_bank_start
+	    if isult(xheap, xaddr) // if xheap has wrapped around
+		xheap = $FFFF
+		return 0
+	    fin
+	fin
+    until start_bank == end_bank
+    if ^rambankcount < 4 and isuge(xheap, xheapsize)
+	return 0
+    fin
+    return xaddr
+end
+#endif
+
+//
+// Acorn MOS API
+//
+
+def call_oscli_internal(str, str_cr)
+    stocr(str, str_cr)
+    call(oscli, 0, str_cr, str_cr >> 8, 0)
+end
+
+// call_oscli(str)
+export def call_oscli(str)
+    return callalloca(str, @call_oscli_internal, ^str + 1)
+end
+
+#ifndef STANDALONE
+//
+// Symbol table routines.
+//
+// The symbol table is a "chunked array"; the first chunk is at symtbl and
+// each chunk consists of a number of entries, each of which consists of:
+// - symbol name (as DCI string)
+// - symbol address (2 bytes)
+// If the symbol name's first byte is 0, that marks the end of the chunk.
+// The two following bytes are 0 if there are no more chunks, otherwise
+// they are the address of the next chunk.
+//
+// The first chunk is a different size than later chunks but this is only
+// relevant to addsym(); it makes no difference to lookuptbl().
+//
+def lookupsym(sym)
+    return lookuptbl(sym, symtbl)
+end
+def addsym(sym, addr)
+    word symtbl_chunk_size, newsymtblchunk
+    word SFTODO // TODO: DELETE
+    
+    // We must always have room for a 16 character name, two bytes for the
+    // address associated with that name and another three bytes for the
+    // 'next chunk' pointer.
+    const max_entry_size = 16 + 2 + 3
+    if 0 // TODO: DELETE
+	    prword(addr)
+	    SFTODO = sym
+	    while ^SFTODO & $80
+		putc(^SFTODO & $7f)
+		SFTODO++
+	    loop
+	    putc(^SFTODO)
+	    putln()
+    fin
+    if symtblchunk == initialsymtbl
+	symtbl_chunk_size = initialsymtblsz
+    else
+	symtbl_chunk_size = max_entry_size
+    fin
+    if lastsym - symtblchunk + max_entry_size > symtbl_chunk_size
+    	newsymtblchunk = xheapalloc(max_entry_size)
+	if symtblchunk + max_entry_size == newsymtblchunk
+	    // This allocation is contiguous with the previous chunk; we can
+	    // therefore merge this allocation to avoid the wasted space at the
+	    // end. This is important when we're called in modload(), as
+	    // otherwise the assumption about the growth of the symbol table
+	    // per addsym() call wouldn't be true. Because this is the common
+	    // case, we can get away with allocating only max_entry_size bytes
+	    // every time without fragmentation wasting space.
+	    symtblchunk = lastsym
+	    heaprelease(symtblchunk + max_entry_size)
+	else
+	    symtblchunk = newsymtblchunk
+	    lastsym=>1 = symtblchunk
+	    lastsym = symtblchunk
+	fin
+    fin
+    while ^sym & $80
+        ^lastsym = ^sym
+        lastsym  = lastsym + 1
+        sym      = sym     + 1
+    loop
+    lastsym->0 = ^sym
+    lastsym=>1 = addr
+    lastsym    = lastsym + 3
+    ^lastsym   = 0
+    lastsym=>1 = 0
+end
+//
+// Module routines.
+//
+def lookupmod(mod)
+    byte dci[17]
+    return lookuptbl(modtosym(mod, @dci), symtbl)
+end
+def modaddr(str)
+    byte mod[17]
+    stodci(str, @mod)
+    return lookupmod(@mod)
+end
+#endif
+#ifndef STANDALONE
+def addmod(mod, addr)
+    byte dci[17]
+    return addsym(modtosym(mod, @dci), addr)
+end
+def lookupextern(esd, index)
+    word sym, addr
+    byte str[16]
+    while ^esd
+        sym = esd
+        esd = esd + dcitos(esd, @str)
+        if esd->0 & $10 and esd->1 == index
+            addr = lookupsym(sym)
+	    if !addr
+                perr = $81
+	        putc('?')
+		puts(@str)
+		putln
+	    fin
+            return addr
+        fin
+        esd = esd + 3
+    loop
+    return 0
+end
+def adddef(addr, deflast)
+    word defentry
+    defentry = *deflast
+    *deflast = defentry + 5
+    defentry->0 = $20
+    defentry=>1 = interp
+    defentry=>3 = addr
+    defentry->5 = 0 // null out next entry
+    return defentry
+end
+def lookupdef(addr, deftbl)
+    while deftbl->0 == $20
+        if deftbl=>3 == addr
+            return deftbl
+        fin
+        deftbl = deftbl + 5
+    loop
+    return 0
+end
+def modload(mod)
+    word rdlen, modsize, bytecode, defofst, defcnt, init, fixup
+    word addr
+#ifdef PLAS128
+    word defaddr
+#endif
+    word modaddr, modfix, modend
+    word deftbl, deflast
+    word moddep, rld, esd, sym
+    byte str[17], filename[17]
+    const header_size = 128
+    byte header[header_size]
+    byte handle
+    byte block[osgbpb_block_size]
+    byte file_length[4]
+
+    perr = 0
+
+    // We use OSGBPB to read the first header_size bytes of the module, but we
+    // use OSFILE to load the entire module later; tests on Acorn DFS 2.24 on
+    // BeebEm suggest OSFILE can load 6.25K in 1.74s compared with 4.47s for
+    // OSGBPB. So it's well worth the "waste" of reading the header twice.
+
+    // TODO: The filename could in principle be very long and could overflow
+    // the filename[] array; we could perhaps use the fixed space at inbuff
+    // for the filename. But this might not be the only place filenames
+    // are held in small arrays, so check before changing anything. (On the
+    // other hand, filenames are embedded in modules as dependencies, and
+    // those "have" to be short, so we might want to just refuse to handle
+    // long filenames anyway. Then again, perhaps eventually we might
+    // support a "library" where things are searched for if not in CSD.)
+
+    // TODO: Do I need to be setting perr in any situations here? Can I
+    // perhaps get rid of perr altogether (e.g. and replace it with calls
+    // to oserror())?
+
+    //
+    // Read the RELocatable module header (first header_size bytes); we also
+    // get the file length while we have the file open.
+    //
+    dcitocr(mod, @filename)
+    // TODO: Nasty temporary hack while I try to get ROGUE working
+    deftbl = @filename
+    if 0 // TODO
+    while ^deftbl <> 13
+    	putc(^deftbl)
+	deftbl++
+    loop
+    putln()
+    fin
+    filename[7] = 13
+    handle = call(osfind, osfind_input, @filename, @filename >> 8, 0).0
+    if handle == 0
+	oserror(0, "Not found")
+    fin
+    modload_handle = handle
+    block.0 = handle
+    block:1 = @header
+    block:3 = high_order_address()
+    block:5 = header_size
+    block:7 = 0
+    call(osgbpb, osgbpb_read_ignoring_new_ptr, @block, @block >> 8, 0)
+    rdlen = header_size - block:5
+    call(osargs, osargs_read_ext, scratch, handle, 0)
+    file_length:0 = scratch:0; file_length:2 = scratch:2
+    modload_handle = 0; call(osfind, osfind_close, 0, handle, 0)
+
+    if rdlen > 16
+	modsize = header:0
+	moddep  = @header.1
+	defofst = modsize
+        init    = 0
+	// TODO: Once finished reworking this, should test with a file which doesn't
+	// have $DA7F special stuff, if I can find or create one.
+	// TODO: The rdlen > 4 test is probably redundant, let's wait until this
+	// code has settled down before removing it.
+        if rdlen > 4 and header:2 == $DA7F // DAVE+1 = magic number :-)
+            //
+            // This is an EXTended RELocatable (data+bytecode) module.
+            //
+	    // systemflags = header:4 | systemflags
+            defofst  = header:6
+            defcnt   = header:8
+            init     = header:10
+            moddep   = @header.12
+	    //
+	    // Load module dependencies.
+	    //
+            while ^moddep
+                if !lookupmod(moddep)
+                    if modload(moddep) < 0
+	      	        return -perr
+		    fin
+                fin
+                moddep = moddep + dcitos(moddep, @str)
+		// Just to be paranoid, let's check for the case where a module has
+		// loads of dependencies and they overflow the header. This won't
+		// catch everything, as it doesn't check the call to dcitocr()
+		// inside the above modload() hasn't overflowed, but it should be
+		// fairly reliable in practice.
+		if (moddep - @header) >= rdlen
+		    oserror(0, "Header too long")
+		fin
+            loop
+	    //
+	    // Init def table.
+	    //
+	    deftbl   = xheapalloc(defcnt * 5 + 1)
+	    deflast  = deftbl
+	    ^deflast = 0
+	else
+            return -69
+        fin
+	//
+	// Add module to symbol table. This may grow the symbol table, so we
+	// do it before we allocate space on the heap for the module. The
+	// address of the module is not used (although it's important it's
+	// not zero, otherwise lookupmod() will indicate the module isn't
+	// loaded when it is) and due to the symbol table changes we don't
+	// have modaddr available here (unlike the Apple code), so we just
+	// use a non-zero constant.
+	//
+	addmod(mod, $0001)
+	//
+	// Check there's room for the entire file onto the heap now any
+	// dependencies have been loaded.
+	//
+	addr = 0
+	if file_length:2 <> 0 // if file is >=64K
+	    heapfull()
+	fin
+	rdlen = file_length:0
+	addr = xheapalloc(rdlen)
+	//
+	// Load the file
+	//
+	if readfile(@filename, addr)
+	    return -perr
+	fin
+	//
+	// Release the claim we just made; we really did it only to see if it
+	// would fail. The code immediately following will shift the loaded
+	// module down to avoid wasting space on the header and claim the
+	// required amount of space for the module's data and code.
+	//
+	heaprelease(addr)
+	//
+	// Alloc heap space for relocated module (data + bytecode).
+	//
+	moddep  = moddep  + 1 - @header + *heapptr
+	modfix  = moddep  - (*heapptr + 2) // Adjust to skip header
+	modsize = modsize - modfix
+	rdlen   = rdlen   - modfix - 2
+	modaddr = xheapalloc(modsize) // can't fail anyway
+	memcpy(modaddr, moddep, rdlen)
+	//
+	// Apply all fixups and symbol import/export.
+	//
+        modfix   = modaddr - modfix
+        bytecode = defofst + modfix - MODADDR
+        modend   = modaddr + modsize
+        rld      = modend  // Re-Locatable Directory
+        esd      = rld     // Extern+Entry Symbol Directory
+        while ^esd         // Scan to end of ESD (SF: actually, scan to start of ESD?)
+            esd = esd + 4
+	loop
+        esd = esd + 1
+#ifdef PLAS128
+	//
+	// Locate bytecode defs in appropriate bank.
+	//
+	defaddr = allocxheap(rld - bytecode)
+	// TODO: If there's only one caller of allocxheap(), might as well fold
+	// the following test into allocxheap() itself.
+	if defaddr == 0
+	    heapfull()
+	fin
+	modend  = bytecode
+#endif
+	//
+	// Free up the end-of-module in main memory. This is premature
+	// as we are going to access that data, but we may allocate from the
+	// heap to expand the symbol table, so we must do this first. This is
+	// "risky", because any more heap allocations could allocate memory
+	// we will try to read. We get away with it because only addsym() is
+	// going to touch heap-allocated memory. Any one addsym() call can only touch
+	// len(symbol_name) + 2 (symbol address) new bytes, and each ESD entry
+	// is len(symbol_name) + 3 bytes, so we're always OK even if there
+	// are no RLD entries. TODO: Double check this reasoning!
+	//
+	heaprelease(modend)    
+        //
+        // Run through the Re-Location Dictionary.
+        //
+        while ^rld
+            if ^rld == $02
+	        //
+		// This is a bytcode def entry - add it to the def directory.
+		//
+#ifdef PLAS128
+                adddef(rld=>1 - defofst + defaddr, @deflast)
+#else
+		adddef(rld=>1 - defofst + bytecode, @deflast)
+#endif
+            else
+                addr = rld=>1 + modfix
+                if isuge(addr, modaddr) // Skip fixups to header
+                    if ^rld & $80 // WORD sized fixup.
+                        fixup = *addr
+                    else	  // BYTE sized fixup.
+                        fixup = ^addr
+                    fin
+                    if ^rld & $10 // EXTERN reference.
+                        fixup = fixup + lookupextern(esd, rld->3)
+                    else	  // INTERN fixup.
+                        fixup = fixup + modfix - MODADDR
+                        if isuge(fixup, bytecode)
+                            //
+                            // Bytecode address - replace with call def directory.
+                            //
+#ifdef PLAS128
+                            fixup = lookupdef(fixup - bytecode + defaddr, deftbl)
+#else
+                            fixup = lookupdef(fixup - bytecode + bytecode, deftbl)
+#endif
+                        fin
+                    fin
+                    if ^rld & $80 // WORD sized fixup.
+                        *addr = fixup
+                    else	  // BYTE sized fixup.
+                        ^addr = fixup
+                    fin
+                fin
+            fin
+            rld = rld + 4
+        loop
+#ifdef PLAS128
+	//
+	// Move bytecode to AUX bank.
+	//
+	memxcpy(defaddr, bytecode, modsize - (bytecode - modaddr))
+#endif
+	//
+        // Run through the External/Entry Symbol Directory.
+	//
+        while ^esd
+            sym = esd
+            esd = esd + dcitos(esd, @str)
+            if ^esd & $08
+		//
+                // EXPORT symbol - add it to the global symbol table.
+		//
+                addr = esd=>1 + modfix - MODADDR
+                if isuge(addr, bytecode)
+		    //
+		    // Use the def directory address for bytecode.
+		    //
+#ifdef PLAS128
+                    addr = lookupdef(addr - bytecode + defaddr, deftbl)
+#else
+                    addr = lookupdef(addr - bytecode + bytecode, deftbl)
+#endif
+                fin
+                addsym(sym, addr)
+		// TODO: The following test could be removed eventually.
+		// Assert that the last byte written in the symbol table
+		// (lastsym + 2) hasn't trampled over the next ESD entry
+		// (at esd + 3).
+		if isuge(lastsym + 2, esd + 3)
+		    oserror(0, "Symbol table clash")
+		fin
+            fin
+            esd = esd + 3
+        loop
+    fin
+    if perr
+        return -perr
+    fin
+    //
+    // Call init routine if it exists.
+    //
+    fixup = 0
+    if init
+#ifdef PLAS128
+	fixup = adddef(init - defofst + defaddr, @deflast)()
+#else
+	fixup = adddef(init - defofst + bytecode, @deflast)()
+#endif
+	if fixup < modinitkeep
+	    //
+	    // Free init routine unless initkeep
+	    //
+#ifdef PLAS128
+            xheap = init - defofst + defaddr
+#else
+            modend = init - defofst + bytecode
+#endif
+	    if fixup < 0
+		perr = -fixup
+	    fin
+	else
+	    fixup = fixup & ~modinitkeep
+	fin
+    fin
+    return fixup
+end
+#endif
+#ifndef STANDALONE
+//
+// Command mode
+//
+def stripspaces(strptr)
+    while ^strptr and ^(strptr + ^strptr) <= ' '
+        ^strptr = ^strptr - 1
+    loop
+    while ^strptr and ^(strptr + 1) <= ' '
+        memcpy(strptr + 1, strptr + 2, ^strptr)
+        ^strptr = ^strptr - 1
+    loop
+end
+def striptrail(strptr)
+    byte i
+
+    for i = 1 to ^strptr
+        if ^(strptr + i) <= ' '
+	    ^strptr = i - 1
+	    return strptr
+	fin
+    next
+    return strptr
+end
+def parsecmd(strptr)
+    byte cmd
+
+    cmd = 0
+    stripspaces(strptr)
+    if ^strptr
+        cmd = ^(strptr + 1)
+        memcpy(strptr + 1, strptr + 2, ^strptr)
+        ^strptr = ^strptr - 1
+    fin
+    stripspaces(strptr)
+    return cmd
+end
+#endif
+// User code could choose to install an alternate error handler, but
+// it's probably not a good idea; most of the time user code should
+// restrict itself to manipulating *errjb.
+def error_handler
+  // The error number is available to the target at ^errnum but since
+  // longjmp() naturally passes along a value we pass the error number.
+  // TODO: Should we not do this? 0 is a valid error number but it wont'
+  // be transmitted unmodified, so this perhaps invites error handler to
+  // write code which has a latent bug.
+  longjmp(*errjb, ^errnum)
+end
+#ifndef STANDALONE
+def modexec(modfile)
+    byte moddci[17]
+    word saveheap
+#ifdef PLAS128
+    word savexheap
+#endif
+    word savesym, savesymtblchunk
+    // word saveflags
+    word error, action, olderrjb, jb
+
+    perr = 1
+    // TODO: There's currently nothing to prevent the user entering
+    // +MORETHANSEVENTEENCHARACTERS at the prompt and then we'll overflow
+    // moddci here.
+    if stodci(modfile, @moddci)
+        saveheap  = *heapptr
+#ifdef PLAS128
+	savexheap = xheap
+#endif
+	savesym   = lastsym
+	savesymtblchunk = symtblchunk
+	// saveflags = systemflags
+        modload_handle = 0
+        olderrjb = *errjb
+	// We allocate a jmp_buf on the heap; it will get trapped and
+	// leaked if the module being executed remains resident, but
+	// that can't really be helped (and it will be fairly small).
+	// We can't allocate a local jmp_buf because the address of
+	// it would change if the executed module changes mode and
+	// thereby alters HIMEM; mode() will relocate the frame
+	// stack but it won't patch up the address at *errjb.
+	jb = saveheap
+	error = setjmp(jb)
+	if error == 0
+	    xheapalloc(jmpbufsz(jb))
+	    *errjb = jb
+	    action = modload(@moddci)
+	fin
+	*errjb = olderrjb
+	if error <> 0 or action < modkeep
+	    if modload_handle <> 0
+		call(osfind, osfind_close, 0, modload_handle, 0)
+	    fin
+
+	    lastsym     = savesym
+	    symtblchunk = savesymtblchunk
+	    ^lastsym    = 0
+	    lastsym=>1  = 0
+#ifdef PLAS128
+	    xheap       = savexheap
+#endif
+	    *heapptr    = saveheap
+	fin
+	// systemflags = saveflags
+	if error <> 0
+	    error_handler()
+	fin
+    fin
+    return -perr
+end
+#endif
+#ifndef STANDALONE
+// The parsing in here is deliberately naive to avoid bloating the virtual
+// machine too much. It also works in our favour because parsecmd() only pays
+// attention to the first character, so this means that "M7" and "MODE 7" both
+// work (as, in fact, will things like " M O D E    1 3  5").
+def modechange(cmdptr)
+    word n, i
+    byte c
+    n = 0
+    i = 1
+    while i <= ^cmdptr
+	c = ^(cmdptr + i)
+	if c >= '0' and c <= '9'
+	    n = (n * 10) + (c - '0')
+	fin
+	i++
+    loop
+    if not mode(n)
+	// Nothing is likely to check the error code, but we might as well follow
+	// BASIC's lead anyway. (This is interactive only; mode() returns a
+	// a success/failure indicator rather than raising an OS error.)
+	oserror(25, "Bad mode")
+    fin
+end
+#endif
+//
+// Get heap start.
+//
+*heapptr = *freemem
+#ifdef PLAS128
+    xheapsize = ^rambankcount * 16 * 1024
+#endif
+#ifndef STANDALONE
+//
+// Init globals; see note at top about why we have to do this.
+//
+symtbl = initialsymtbl
+symtblchunk = initialsymtbl
+lastsym = initialsymtbl
+syslibsym = @exports     
+//
+// Init symbol table.
+//
+^lastsym = 0
+lastsym=>1 = 0
+stodci(@syslibstr, *heapptr)
+addmod(*heapptr, @version)
+// TODO: Can we have the symbol table in the binary be usable directly?
+while *syslibsym
+    stodci(syslibsym=>0, *heapptr)
+    addsym(*heapptr, syslibsym=>2)
+    syslibsym = syslibsym + 4
+loop
+#endif
+//
+// Set up error handler
+//
+*errjb = heapmark()
+if setjmp(*errjb) == 0
+  xheapalloc(jmpbufsz(*errjb))
+  *errfp = @error_handler
+else
+#ifndef STANDALONE
+  putln
+  puts(@errorstr)
+  prbyte(^errnum)
+  puts(@colonstr)
+  puts(errstr)
+  putln
+#endif
+fin
+#ifndef STANDALONE
+//
+// Initialise cmdptr
+//
+cmdptr = *heapptr
+^cmdptr = 0
+perr = 0
+//
+// Print some startup info.
+//
+if not ^cmdptr
+    puts(@verstr)
+    prbyte(version.1)
+    putc('.')
+    prbyte(version.0)
+    putln
+    // TODO: Temporarily moved this to prompt instead of only displaying it
+    // on startup; this makes it more obvious if heap gets leaked.
+    //puts(@freestr)
+    //prword(availheap)
+#ifdef PLAS128
+    //puts(@xfreestr)
+    //prword(xheapsize - 1 - xheap) // a bit approximate
+#endif
+    //putln
+fin
+//
+// Handle commands.
+//
+while 1
+    if ^cmdptr
+        when toupper(parsecmd(cmdptr))
+	    is 'M'
+		modechange(cmdptr)
+		break
+	    is '+'
+	        modexec(striptrail(cmdptr))
+		break
+	    is '*'
+	    	call_oscli(cmdptr)
+		break
+	    otherwise
+	        puts(@huhstr)
+        wend
+        if perr
+            puts(@errorstr)
+	    prbyte(perr)
+	    perr = 0
+        else
+            puts(@okstr)
+        fin
+	putln()
+    fin
+    puts(@freestr)
+    prword(availheap)
+#ifdef PLAS128
+    puts(@xfreestr)
+    prword(xheapsize - 1 - xheap) // a bit approximate
+#endif
+    putln
+    puts(@prompt)
+    cmdptr = gets(':')
+loop
+#endif
+done
