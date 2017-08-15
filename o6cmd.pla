@@ -416,7 +416,13 @@ end
 //
 export asm isuge
 #if 1 // TODO
-	halt r0, r0, 0x9004
+	pop r11, restk
+	pop r10, restk
+	mov r12, r0
+	cmp r10, r11
+	mi.dec r12, 1
+	push r12, restk
+	mov pc, rlink
 #else
 	LDA	ESTKL+1,X
 	CMP	ESTKL,X
@@ -539,6 +545,7 @@ asm dcitos
 	RTS
 #endif
 end
+#if 0 // TODO: temporarily switched to PLASMA version - may or may not be worth writing this in OPC6 assembler
 //def stodci(str, dci)
 //    byte len, c
 //    len = ^str
@@ -587,9 +594,19 @@ asm stodci
 	RTS
 #endif
 end
+#endif
 asm toupper
 #if 1 // TODO
-	halt r0, r0, 0x900b
+	; TODO: Does OPC6 assembler support character constants?
+	pop r10, restk
+	and r10, r0, 0x7f
+	cmp r10, r0, 97 # 'a'
+	mi.mov pc, r0, toupper_done
+	cmp r10, r0, 122 # 'z'+1
+	mi.sub r10, r0, 0x1f
+toupper_done:
+	push r10, restk
+	mov pc, rlink
 #else
 	LDA     ESTKL,X
 TOUPR	AND     #$7F
@@ -671,6 +688,7 @@ export asm stocr
 end
 
 #ifndef STANDALONE
+#if 0 // TODO: Temporarily (?) use the PLASMA version
 //
 // Module symbols are entered into the symbol table
 // pre-pended with a '#' to differentiate them
@@ -712,6 +730,7 @@ asm modtosym
 	RTS
 #endif
 end
+#endif
 //
 // Lookup routines.
 //
@@ -889,7 +908,10 @@ end
 // setjmp(jmp_buf *b) -> 0 on save, longjmp val otherwise
 export asm setjmp
 #if 1 // TODO
-	halt r0, r0, 0x9012
+	; TODO: Hack
+	pop r10, restk
+	push r0, restk
+	mov pc, rlink
 #else
 	STX	ESP
 
@@ -1151,7 +1173,14 @@ end
 //
 export asm putln
 #if 1 // TODO
-	halt r0, r0, 0x9015
+	EQU charout, 0xfe09	
+	mov r10, r0, 10
+	out r10, r0, charout
+	mov r10, r0, 13
+	out r10, r0, charout
+	;* We must return a value; we just return zero.
+	push r0, restk
+	mov pc, rlink
 #else
 	;* We must return a value; we just return junk.
 	DEX
@@ -1161,7 +1190,10 @@ export asm putln
 end
 export asm putc
 #if 1 // TODO
-	halt r0, r0, 0x9016
+	pop r10, restk
+	push r10, restk
+	out r10, r0, charout
+	mov pc, rlink
 #else
 	LDA	ESTKL,X
 	JMP	OSWRCH
@@ -1229,6 +1261,7 @@ not_escape
 	RTS
 #endif
 end
+#if 0 // TODO: Temporarily (?) writing this in PLASMA not assembly
 // def puts(str)
 export asm puts
 #if 1 // TODO
@@ -1252,6 +1285,50 @@ export asm puts
 	RTS
 #endif
 end
+#endif
+#if 1 // TODO TEMP?
+// def puts(str)
+def puts(str)
+    byte len, c
+    len = ^str
+    while len > 0
+	str++
+	putc(^str)
+	len--
+    loop
+end
+#endif
+#if 1 // TODO TEMP?
+def stodci(str, dci)
+    byte len, c
+    len = ^str
+    if len == 0
+        return 0
+    fin
+    c = toupper((str).[len]) & $7F
+    len = len - 1
+    (dci).[len] = c
+    while len
+    	c = toupper((str).[len]) | $80
+    	len = len - 1
+    	(dci).[len] = c
+    loop
+    return ^str
+end
+#endif
+#if 1 // TODO TEMP?
+def modtosym(mod, dci)
+    byte len, c
+    (dci).0 = '#'|$80
+    len = 0
+    repeat
+        c = (mod).[len]
+        len = len + 1
+        (dci).[len] = c
+    until !(c & $80)
+    return dci
+end
+#endif
 export def syscall(cmd, params)
     // Just a dummy implementation
     oserror(0, "syscall")
