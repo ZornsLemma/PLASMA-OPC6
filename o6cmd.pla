@@ -34,6 +34,9 @@ const MODADDR      = $1000
 
 // The following constants must be kept in sync with vmsrc/plvmzp.inc and
 // vmsrc/acornc.inc.
+// TODO: This memory use can be heavily optimised on the OPC6 where PLASMA's
+// data space is entirely distinct from the OS, but for now let's keep the
+// changes minimal.
 
 // Note that we cannot rely on initialisation of non-constant globals; on
 // PLAS32 running on a second processor, the VM is re-entered on BREAK and
@@ -140,6 +143,7 @@ byte hexchar[]    = '0','1','2','3','4','5','6','7','8','9','A','B','C','D','E',
 // Exported Machine ID. We somewhat arbitrarily assign the apparently free code
 // $C8 for all Acorn machines; once you know you're on an Acorn machine you can
 // use something like OSBYTE 0 to determine the exact model.
+// TODO: NEW MACHINE ID FOR OPC6 - CAREFUL TO FIT IN WITH THE SCHEME USED
 //
 export byte machid       = $C8
 #ifndef STANDALONE
@@ -1288,96 +1292,18 @@ end
 
 // Change the screen mode
 //
-// Care must be taken when calling mode(). The parameter stack starts at the
-// bottom of screen memory (HIMEM) and grows downwards. If a mode change
-// alters HIMEM, the parameter stack needs to be relocated in memory. mode()
-// takes care of this, but any code which has taken the address of local
-// variables on the parameter stack (or, on PLAS128, constant strings, which
-// also live on the parameter stack) will have an invalid address after
-// the relocation. (This isn't an issue if changing between modes which doesn't
-// alter HIMEM.)
-//
-// TL;DR: Call mode() as early as possible and with as few nested function
-// calls in effect as possible and you'll probably be safe.
-//
 // Returns TRUE if the mode change was successful and FALSE if not (typically
 // caused by insufficient memory).
 export def mode(n)
-    word new_himemh, himem, new_himem
-    byte s, frame_size
-    word call_jsr_return, ical_jsr_return, possible_jsr_return
-    word working_ifp, working_pp
-
-    // If the mode change doesn't alter HIMEM, it's trivial. We need to check
-    // specifically for the second processor case here; see the code just
-    // above INITFP.
-    new_himemh = call(osbyte, osbyte_read_himem_for_mode, n, 0, 0).2
-    if new_himemh == ^himemh or ^himemh > $80
-	putc(22)
-	putc(n)
-	return TRUE
-    fin
-
-    himem = ^himemh << 8
-    new_himem = new_himemh << 8
-#ifdef PLAS128
-    gm_new_frame_start = *pp + (new_himem - himem)
-    // Because we use gm_new_frame_start below, it's important that PP doesn't
-    // move between now and then - which means none of the following code can
-    // use constant strings. (We could redo this calculation at that point, but
-    // it's nicer not to have to.)
-#else
-    gm_new_frame_start = *ifp + (new_himem - himem)
-#endif
-    // Insist on 512 bytes free afterwards, so that an application has a
-    // chance to not crash after a mode change when memory is tight.
-    if isult(gm_new_frame_start - 512, *heapptr)
-	return FALSE
-    fin
-
-    ^himemh = new_himemh
-
-    // We're now going to copy the parameter frame stack and adjust IFP (and
-    // PP for PLAS128) accordingly. We need a temporary parameter frame
-    // stack so we can call memcpy(); once we've switched to that we can't
-    // access any local variables, so we copy everything into globals first.
-    gm_new_himem_higher = isuge(new_himem, himem)
-#ifdef PLAS128
-    gm_new_ifp = *ifp + (new_himem - himem)
-    gm_copy_from = *pp
-#else
-    gm_copy_from = *ifp
-#endif
-    gm_copy_size = himem - gm_copy_from
-    gm_new_mode = n
-    *ifp = *heapptr + 256 // we know there's at least 512 bytes available
-
-    if gm_new_himem_higher
-	putc(22)
-	putc(gm_new_mode)
-    fin
-    memcpy(gm_new_frame_start, gm_copy_from, gm_copy_size)
-    if not gm_new_himem_higher
-	putc(22)
-	putc(gm_new_mode)
-    fin
-#ifdef PLAS128
-    *pp = gm_new_frame_start
-    *ifp = gm_new_ifp
-#else
-    *ifp = gm_new_frame_start
-#endif
-// TODO TEMP!
-    if call(osbyte, osbyte_read_himem, 0, 0, 0).2 <> ^himemh
-    	puts("foo")
-    	oserror(255,"foo")
-    fin	
+    putc(22)
+    putc(n)
     return TRUE
 end
 
 //
 // FILE I/O
 //
+// TODO: I SUSPECT MOST USES OF 'CALL' NEED TO TAKE CARE TO WORD-ALIGN THEIR DATA BLOCKS
 #ifndef STANDALONE
 def high_order_address
     return call(osbyte, osbyte_read_high_order_address, 0, 0, 0):1
@@ -2070,7 +1996,9 @@ end
 //
 // Get heap start.
 //
-*heapptr = *freemem
+// TODO: Need to make VM assembly code aware of *heapptr so it can check for heap
+// overflows
+*heapptr = $0E00 // TODO *freemem
 #ifdef PLAS128
     xheapsize = ^rambankcount * 16 * 1024
 #endif
