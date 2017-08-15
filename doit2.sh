@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 set -o pipefail
-cpp -E -P - < o6cmd.pla > pp.pla
+cpp -DPLAS128 -E -P - < o6cmd.pla > pp.pla
 ~/src/PLASMA/src/plasm -AO < pp.pla > compiled.a
 cat plasma.s > merged.s
 echo '; Start executing compiled PLASMA code here' >> merged.s

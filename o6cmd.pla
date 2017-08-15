@@ -246,6 +246,9 @@ word syslibsym
 // CALL(ADDR, AREG, XREG, YREG, STATUS)
 //
 export asm call
+#if 1 // TODO
+	halt r0, r0, 0x999
+#else
 REGVALS =   SRC
         PHP
         LDA     ESTKL+4,X
@@ -281,6 +284,7 @@ REGVALS =   SRC
         STY     ESTKH,X
         PLP
         RTS
+#endif
 end
 //
 // SET MEMORY TO VALUE
@@ -288,6 +292,9 @@ end
 //   With optimizations from Peter Ferrie
 //
 export asm memset
+#if 1 // TODO
+	halt r0, r0, 0x9002
+#else
 	LDA     ESTKL+2,X
 	STA     DSTL
 	LDA     ESTKH+2,X
@@ -316,12 +323,16 @@ SETMLPH	STA     (DST),Y
 SETMEX	INX
 	INX
 	RTS
+#endif
 end
 //
 // COPY MEMORY
 // MEMCPY(DSTADDR, SRCADDR, SIZE)
 //
 export asm memcpy
+#if 1 // TODO
+	halt r0, r0, 0x9003
+#else
 	INX
 	INX
 MEMCPYINT
@@ -394,11 +405,15 @@ REVCPYLP LDA	(SRC),Y
 	DEC	ESTKH-2,X
 	BNE	REVCPYLP
 CPYMEX	RTS
+#endif
 end
 //
 // Unsigned word comparisons.
 //
 export asm isuge
+#if 1 // TODO
+	halt r0, r0, 0x9003
+#else
 	LDA	ESTKL+1,X
 	CMP	ESTKL,X
 	LDA	ESTKH+1,X
@@ -410,8 +425,12 @@ export asm isuge
 	STA	ESTKH+1,X
 	INX
 	RTS
+#endif
 end
 export asm isule
+#if 1 // TODO
+	halt r0, r0, 0x9003
+#else
 	LDA	ESTKL,X
 	CMP	ESTKL+1,X
 	LDA	ESTKH,X
@@ -423,8 +442,12 @@ export asm isule
 	STA	ESTKH+1,X
 	INX
 	RTS
+#endif
 end
 export asm isugt
+#if 1 // TODO
+	halt r0, r0, 0x9003
+#else
 	LDA	ESTKL,X
 	CMP	ESTKL+1,X
 	LDA	ESTKH,X
@@ -435,8 +458,12 @@ export asm isugt
 	STA	ESTKH+1,X
 	INX
 	RTS
+#endif
 end
 export asm isult
+#if 1 // TODO
+	halt r0, r0, 0x9003
+#else
 	LDA	ESTKL+1,X
 	CMP	ESTKL,X
 	LDA	ESTKH+1,X
@@ -447,18 +474,23 @@ export asm isult
 	STA	ESTKH+1,X
 	INX
 	RTS
+#endif
 end
 #ifndef STANDALONE
 //
 // Addresses of internal routines.
 //
 asm interp
+#if 1 // TODO
+	halt r0, r0, 0x9003
+#else
 	DEX
 	LDA	#<IINTERP
 	STA	ESTKL,X
 	LDA	#>IINTERP
 	STA	ESTKH,X
 	RTS
+#endif
 end
 // 
 // A DCI string is one that has the high bit set for every character except the last.
@@ -476,6 +508,9 @@ end
 //    return len
 //end
 asm dcitos
+#if 1 // TODO
+	halt r0, r0, 0x9003
+#else
 	LDA	ESTKL,X
 	STA	DSTL
 	LDA	ESTKH,X
@@ -498,6 +533,7 @@ asm dcitos
 	STA	ESTKL,X
 	STY	ESTKH,X
 	RTS
+#endif
 end
 //def stodci(str, dci)
 //    byte len, c
@@ -516,6 +552,9 @@ end
 //    return ^str
 //end
 asm stodci
+#if 1 // TODO
+	halt r0, r0, 0x9003
+#else
 	LDA	ESTKL,X
 	STA	DSTL
 	LDA	ESTKH,X
@@ -542,8 +581,12 @@ asm stodci
 ++	STA	ESTKL,X
 	STY	ESTKH,X
 	RTS
+#endif
 end
 asm toupper
+#if 1 // TODO
+	halt r0, r0, 0x9003
+#else
 	LDA     ESTKL,X
 TOUPR	AND     #$7F
 	CMP     #'a'
@@ -553,10 +596,14 @@ TOUPR	AND     #$7F
 	SBC     #$1F
 +	STA     ESTKL,X
 	RTS
+#endif
 end
 // Convert a DCI string to an Acorn OS-style string terminated by CR
 // int dcitocr(dci, cr) - returns length (of DCI string/excluding CR)
 asm dcitocr
+#if 1 // TODO
+	halt r0, r0, 0x9003
+#else
 	; TODO: This little code fragment to set up SRC/DST is used in
 	; a few places and could possibly be factored out; as long as
 	; we continue to assemble this file directly into the VM
@@ -582,11 +629,15 @@ asm dcitocr
 	STA	(DST),Y
 	STY	ESTKL,X
 	RTS
+#endif
 end
 #endif
 // Converts a PLASMA string to an Acorn OS-style string terminated by CR
 // void stocr(str, cr)
 export asm stocr
+#if 1 // TODO
+	halt r0, r0, 0x9003
+#else
 	LDA	ESTKL,X
 	STA	DSTL
 	LDA	ESTKH,X
@@ -612,6 +663,7 @@ export asm stocr
 	STA	(DST),Y
 	LDX	ESP
 	RTS
+#endif
 end
 
 #ifndef STANDALONE
@@ -632,6 +684,9 @@ end
 //    return dci
 //end
 asm modtosym
+#if 1 // TODO
+	halt r0, r0, 0x9003
+#else
 	LDA	ESTKL+1,X
 	STA	SRCL
 	LDA	ESTKH+1,X
@@ -651,11 +706,15 @@ asm modtosym
 	INY
 	BCS	-
 	RTS
+#endif
 end
 //
 // Lookup routines.
 //
 asm lookuptbl
+#if 1 // TODO
+	halt r0, r0, 0x9003
+#else
 	LDA	ESTKL,X
 	STA	DSTL
 	LDA	ESTKH,X
@@ -713,6 +772,7 @@ asm lookuptbl
 	PLA
 	STA	DSTH
 	BNE	.NEXT
+#endif
 end
 #endif
 
@@ -730,6 +790,9 @@ end
 // This is useful because "normal" local variables are restricted to a total
 // of 256 bytes per function.
 export asm callalloca(fn, size)
+#if 1 // TODO
+	halt r0, r0, 0x9003
+#else
 	LDA	ESTKL+1,X
 	STA	TMPL
 	LDA	ESTKH+1,X
@@ -785,12 +848,16 @@ export asm callalloca(fn, size)
 	RTS
 
 +	JMP	(TMP)
+#endif
 end
 
 //
 // ACORN OS ERROR GENERATION
 //
 export asm oserror(n, msg)#0
+#if 1 // TODO
+	halt r0, r0, 0x9003
+#else
 	LDA	ESTKL+1,X
 	STA	$101
 	LDA	ESTKL,X
@@ -808,6 +875,7 @@ export asm oserror(n, msg)#0
 	DEY
 	BNE	-
 	JMP	$100
+#endif
 end
 
 //
@@ -816,6 +884,9 @@ end
 
 // setjmp(jmp_buf *b) -> 0 on save, longjmp val otherwise
 export asm setjmp
+#if 1 // TODO
+	halt r0, r0, 0x9003
+#else
 	STX	ESP
 
 	LDY	#0
@@ -897,10 +968,14 @@ export asm setjmp
 
 ++	LDX	ESP
 	RTS
+#endif
 end
 
 // longjmp(jmp_buf *b, word val)
 export asm longjmp
+#if 1 // TODO
+	halt r0, r0, 0x9003
+#else
 	LDA	ESTKL+1,X
 	STA	TMPL
 	LDA	ESTKH+1,X
@@ -997,6 +1072,7 @@ export asm longjmp
 
 	LDX	ESP
 	RTS
+#endif
 end
 
 #ifdef PLAS128
@@ -1008,6 +1084,9 @@ end
 // Assumes that DST to DST+SIZE-1 all lie in the same 16K bank; this will
 // be true given how allocxheap() works.
 asm memxcpy
+#if 1 // TODO
+	halt r0, r0, 0x9003
+#else
 	LDA	ESTKH,X
 	ORA	ESTKL,X
 	BEQ	MEMXCPYEX
@@ -1059,6 +1138,7 @@ MEMXCPYEX
 	INX
 	INX
 	RTS
+#endif
 end
 #endif
 
@@ -1066,24 +1146,39 @@ end
 // CONSOLE I/O
 //
 export asm putln
+#if 1 // TODO
+	halt r0, r0, 0x9003
+#else
 	;* We must return a value; we just return junk.
 	DEX
 
 	JMP	OSNEWL
+#endif
 end
 export asm putc
+#if 1 // TODO
+	halt r0, r0, 0x9003
+#else
 	LDA	ESTKL,X
 	JMP	OSWRCH
+#endif
 end
 export asm getc
+#if 1 // TODO
+	halt r0, r0, 0x9003
+#else
 	DEX
 	JSR	OSRDCH
 	STA	ESTKL,X
 	LDA	#$00
 	STA	ESTKH,X
 	RTS
+#endif
 end
 export asm gets
+#if 1 // TODO
+	halt r0, r0, 0x9003
+#else
 	STX	ESP
 	LDA	ESTKL,X
 	JSR	OSWRCH
@@ -1128,9 +1223,13 @@ not_escape
 
 	LDX	ESP
 	RTS
+#endif
 end
 // def puts(str)
 export asm puts
+#if 1 // TODO
+	halt r0, r0, 0x9003
+#else
 	STX	ESP
 	LDA	ESTKL,X
 	STA	TMPL
@@ -1147,6 +1246,7 @@ export asm puts
 	BNE	- 
 +	LDX	ESP
 	RTS
+#endif
 end
 export def syscall(cmd, params)
     // Just a dummy implementation
