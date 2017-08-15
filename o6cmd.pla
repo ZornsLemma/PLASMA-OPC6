@@ -247,7 +247,7 @@ word syslibsym
 //
 export asm call
 #if 1 // TODO
-	halt r0, r0, 0x999
+	halt r0, r0, 0x9001
 #else
 REGVALS =   SRC
         PHP
@@ -412,7 +412,7 @@ end
 //
 export asm isuge
 #if 1 // TODO
-	halt r0, r0, 0x9003
+	halt r0, r0, 0x9004
 #else
 	LDA	ESTKL+1,X
 	CMP	ESTKL,X
@@ -429,7 +429,7 @@ export asm isuge
 end
 export asm isule
 #if 1 // TODO
-	halt r0, r0, 0x9003
+	halt r0, r0, 0x9005
 #else
 	LDA	ESTKL,X
 	CMP	ESTKL+1,X
@@ -446,7 +446,7 @@ export asm isule
 end
 export asm isugt
 #if 1 // TODO
-	halt r0, r0, 0x9003
+	halt r0, r0, 0x9006
 #else
 	LDA	ESTKL,X
 	CMP	ESTKL+1,X
@@ -462,7 +462,7 @@ export asm isugt
 end
 export asm isult
 #if 1 // TODO
-	halt r0, r0, 0x9003
+	halt r0, r0, 0x9007
 #else
 	LDA	ESTKL+1,X
 	CMP	ESTKL,X
@@ -482,7 +482,7 @@ end
 //
 asm interp
 #if 1 // TODO
-	halt r0, r0, 0x9003
+	halt r0, r0, 0x9008
 #else
 	DEX
 	LDA	#<IINTERP
@@ -509,7 +509,7 @@ end
 //end
 asm dcitos
 #if 1 // TODO
-	halt r0, r0, 0x9003
+	halt r0, r0, 0x9009
 #else
 	LDA	ESTKL,X
 	STA	DSTL
@@ -553,7 +553,7 @@ end
 //end
 asm stodci
 #if 1 // TODO
-	halt r0, r0, 0x9003
+	halt r0, r0, 0x900a
 #else
 	LDA	ESTKL,X
 	STA	DSTL
@@ -585,7 +585,7 @@ asm stodci
 end
 asm toupper
 #if 1 // TODO
-	halt r0, r0, 0x9003
+	halt r0, r0, 0x900b
 #else
 	LDA     ESTKL,X
 TOUPR	AND     #$7F
@@ -602,7 +602,7 @@ end
 // int dcitocr(dci, cr) - returns length (of DCI string/excluding CR)
 asm dcitocr
 #if 1 // TODO
-	halt r0, r0, 0x9003
+	halt r0, r0, 0x900c
 #else
 	; TODO: This little code fragment to set up SRC/DST is used in
 	; a few places and could possibly be factored out; as long as
@@ -636,7 +636,7 @@ end
 // void stocr(str, cr)
 export asm stocr
 #if 1 // TODO
-	halt r0, r0, 0x9003
+	halt r0, r0, 0x900d
 #else
 	LDA	ESTKL,X
 	STA	DSTL
@@ -685,7 +685,7 @@ end
 //end
 asm modtosym
 #if 1 // TODO
-	halt r0, r0, 0x9003
+	halt r0, r0, 0x900e
 #else
 	LDA	ESTKL+1,X
 	STA	SRCL
@@ -713,7 +713,7 @@ end
 //
 asm lookuptbl
 #if 1 // TODO
-	halt r0, r0, 0x9003
+	halt r0, r0, 0x900f
 #else
 	LDA	ESTKL,X
 	STA	DSTL
@@ -791,7 +791,7 @@ end
 // of 256 bytes per function.
 export asm callalloca(fn, size)
 #if 1 // TODO
-	halt r0, r0, 0x9003
+	halt r0, r0, 0x9010
 #else
 	LDA	ESTKL+1,X
 	STA	TMPL
@@ -856,7 +856,7 @@ end
 //
 export asm oserror(n, msg)#0
 #if 1 // TODO
-	halt r0, r0, 0x9003
+	halt r0, r0, 0x9011
 #else
 	LDA	ESTKL+1,X
 	STA	$101
@@ -885,7 +885,7 @@ end
 // setjmp(jmp_buf *b) -> 0 on save, longjmp val otherwise
 export asm setjmp
 #if 1 // TODO
-	halt r0, r0, 0x9003
+	halt r0, r0, 0x9012
 #else
 	STX	ESP
 
@@ -974,7 +974,7 @@ end
 // longjmp(jmp_buf *b, word val)
 export asm longjmp
 #if 1 // TODO
-	halt r0, r0, 0x9003
+	halt r0, r0, 0x9013
 #else
 	LDA	ESTKL+1,X
 	STA	TMPL
@@ -1085,7 +1085,7 @@ end
 // be true given how allocxheap() works.
 asm memxcpy
 #if 1 // TODO
-	halt r0, r0, 0x9003
+	halt r0, r0, 0x9014
 #else
 	LDA	ESTKH,X
 	ORA	ESTKL,X
@@ -1147,7 +1147,7 @@ end
 //
 export asm putln
 #if 1 // TODO
-	halt r0, r0, 0x9003
+	halt r0, r0, 0x9015
 #else
 	;* We must return a value; we just return junk.
 	DEX
@@ -1157,7 +1157,7 @@ export asm putln
 end
 export asm putc
 #if 1 // TODO
-	halt r0, r0, 0x9003
+	halt r0, r0, 0x9016
 #else
 	LDA	ESTKL,X
 	JMP	OSWRCH
@@ -1165,7 +1165,7 @@ export asm putc
 end
 export asm getc
 #if 1 // TODO
-	halt r0, r0, 0x9003
+	halt r0, r0, 0x9017
 #else
 	DEX
 	JSR	OSRDCH
@@ -1177,7 +1177,7 @@ export asm getc
 end
 export asm gets
 #if 1 // TODO
-	halt r0, r0, 0x9003
+	halt r0, r0, 0x9018
 #else
 	STX	ESP
 	LDA	ESTKL,X
@@ -1228,7 +1228,7 @@ end
 // def puts(str)
 export asm puts
 #if 1 // TODO
-	halt r0, r0, 0x9003
+	halt r0, r0, 0x9019
 #else
 	STX	ESP
 	LDA	ESTKL,X
