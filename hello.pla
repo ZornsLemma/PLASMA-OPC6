@@ -8,7 +8,7 @@ asm putc
 end
 
 asm putln
-    EQU charout, 0xfe09 
+    EQU charout, 0xfe09
     mov r10, r0, 10
     out r10, r0, charout
     mov r10, r0, 13
@@ -19,7 +19,7 @@ asm putln
 end
 
 def puts(str)
-    byte len, c
+    byte len
     len = ^str
     while len > 0
         str++
@@ -40,7 +40,7 @@ end
 
 def hello(i)
     word j
-    puts("Hello AnyCPU! ")      
+    puts("Hello AnyCPU! ")
     for j = i to i + 5
         puti(j)
         putc(' ')

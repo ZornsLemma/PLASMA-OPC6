@@ -1289,7 +1289,7 @@ end
 #if 1 // TODO TEMP?
 // def puts(str)
 def puts(str)
-    byte len, c
+    byte len
     len = ^str
     while len > 0
 	str++
